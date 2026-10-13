@@ -12,7 +12,7 @@ Prototipe tampilan (HTML + Bootstrap 5 + JavaScript) dengan data contoh.
 | File | Peran | Isi |
 |---|---|---|
 | login.html | Semua | Login + pilih peran (isi bebas untuk demo) |
-| dashboard.html | Mahasiswa | Dashboard slot real-time, filter, rekomendasi TF-IDF, status pengajuan |
+| dashboard.html | Mahasiswa | Dashboard slot real-time, filter, rekomendasi, status pengajuan |
 | cari.html | Mahasiswa | Cari dosen + Top 5 rekomendasi |
 | pengajuan.html | Mahasiswa | Status, timeline, posisi antrean, batalkan |
 | riwayat.html | Mahasiswa | Riwayat + filter status |
@@ -22,7 +22,7 @@ Prototipe tampilan (HTML + Bootstrap 5 + JavaScript) dengan data contoh.
 ## Struktur
 - `css/style.css` — semua gaya. Ganti warna di bagian `:root`.
 - `js/data.js` — data contoh dosen. Nanti diganti data dari Laravel.
-- `js/app.js` — fungsi inti: navbar, aturan pengajuan & antrean FIFO, TF-IDF, modal ajukan.
+- `js/app.js` — fungsi inti: navbar, aturan pengajuan & antrean FIFO, modal ajukan.
 - `js/mahasiswa.js`, `js/dosen.js`, `js/koordinator.js` — logika per peran.
 
 ## Catatan

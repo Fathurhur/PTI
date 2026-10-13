@@ -116,7 +116,7 @@ function mountDosenList(o) {
 }
 
 
-// ===== FORM REKOMENDASI TF-IDF =====
+// ===== FORM REKOMENDASI =====
 function mountRekom(o) {
   // update tulisan jumlah kata
   function updateWc() {
@@ -150,7 +150,7 @@ function mountRekom(o) {
 
     // loading dulu biar keliatan lagi ngitung
     o.btn.disabled = true;
-    o.btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Menghitung TF-IDF...';
+    o.btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Menghitung...';
     o.result.innerHTML = '';
 
     setTimeout(function () {
@@ -168,7 +168,7 @@ function mountRekom(o) {
       animateScores(o.result);
 
       o.btn.disabled = false;
-      o.btn.innerHTML = '<i class="bi bi-calculator me-2"></i>Hitung Kecocokan (TF-IDF)';
+      o.btn.innerHTML = '<i class="bi bi-calculator me-2"></i>Hitung Kecocokan Dosen';
     }, 650);
   };
 

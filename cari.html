@@ -9,7 +9,7 @@
 <div id="app-nav"></div>
 <main class="page">
   <div class="mb-4"><h1 class="h3 fw-bold mb-1">Cari Dosen &amp; Rekomendasi</h1>
-    <div class="text-muted">Tempel judul dan abstrak, sistem menghitung kemiripan teks dengan keahlian dan topik dosen (TF-IDF + cosine similarity). Dosen yang masih punya slot tampil lebih dulu.</div></div>
+    <div class="text-muted">Tempel judul dan abstrak, sistem menghitung kemiripan teks dengan keahlian dan topik dosen. Dosen yang masih punya slot tampil lebih dulu.</div></div>
   <div class="row g-4">
     <div class="col-lg-5"><div class="sticky-col">
       <div class="card-x pad mb-3">
@@ -17,7 +17,7 @@
         <input id="rJudul" class="form-control mt-3 mb-2" maxlength="200" placeholder="Judul TA">
         <textarea id="rAbs" class="form-control" rows="8" placeholder="Abstrak (150–300 kata)"></textarea>
         <div class="mt-1 mb-3"><span class="wc" id="rWc">0 kata</span></div>
-        <button class="btn btn-red w-100" id="rBtn"><i class="bi bi-calculator me-2"></i>Hitung Kecocokan (TF-IDF)</button>
+        <button class="btn btn-red w-100" id="rBtn"><i class="bi bi-calculator me-2"></i>Hitung Kecocokan</button>
       </div>
       <div class="card-x pad"><div class="sec-title"><i class="bi bi-trophy"></i>Top 5 dosen paling cocok</div>
         <div id="rHasil"><div class="empty" style="padding:24px 8px"><i class="bi bi-magic"></i>Hasil rekomendasi muncul di sini.</div></div></div>

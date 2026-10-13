@@ -1,6 +1,6 @@
 // app.js
 // isinya fungsi2 umum yg dipake di semua halaman
-// (navbar, toast, pengajuan, antrean, tf-idf, modal ajukan)
+// (navbar, toast, pengajuan, antrean, modal ajukan)
 
 // helper biar ga nulis document.querySelector terus
 function $(selector, parent) {
@@ -423,7 +423,7 @@ function recommend(judul, abstrak) {
     return Math.log((N + 1) / ((df[w] || 0) + 1)) + 1;
   }
 
-  // ubah list token jadi vektor tf-idf
+  // ubah list token jadi vektor 
   function vec(tokens) {
     var tf = {};
     tokens.forEach(function (w) {
