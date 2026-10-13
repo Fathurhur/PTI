@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard Dosen</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="css/style.css" rel="stylesheet">
+</head><body>
+<div id="app-nav"></div>
+<main class="page">
+  <div class="row g-3 mb-4" id="stats"></div>
+
+  <section class="view" id="masuk">
+    <h2 class="sec-title"><i class="bi bi-inbox"></i>Pengajuan masuk</h2>
+    <div class="hint-box mb-3"><i class="bi bi-info-circle me-1"></i>Penolakan wajib disertai alasan (min. 10 karakter). Pengajuan tanpa keputusan setelah 7 × 24 jam otomatis <b>Kedaluwarsa</b>.</div>
+    <div id="masukList"></div>
+  </section>
+
+  <section class="view" id="bimbingan">
+    <h2 class="sec-title"><i class="bi bi-people"></i>Bimbingan saya</h2>
+    <div class="card-x pad mb-3"><div class="d-flex justify-content-between"><b>Kuota bimbingan</b><span id="bimbSisa"></span></div><div class="slots" id="bimbSlots" style="max-width:420px"></div></div>
+    <div class="card-x" style="overflow-x:auto"><table class="table-x"><thead><tr><th>Mahasiswa</th><th>Judul</th><th>Diterima</th><th>Surat penetapan</th></tr></thead><tbody id="bimbBody"></tbody></table></div>
+  </section>
+
+  <section class="view" id="profil">
+    <div class="row g-4">
+      <div class="col-lg-6">
+        <h2 class="sec-title"><i class="bi bi-person-gear"></i>Profil &amp; keahlian</h2>
+        <div class="card-x pad">
+          <div class="d-flex justify-content-between align-items-center p-3 rounded-3 mb-3" style="background:var(--gray-soft)">
+            <div><b>Menerima bimbingan</b><div class="small text-muted">Matikan jika Anda tidak membuka slot.</div></div>
+            <div class="form-check form-switch fs-4 m-0"><input class="form-check-input" type="checkbox" checked onchange="toast(this.checked?'Status: menerima bimbingan.':'Status: tidak menerima bimbingan.','dark')"></div></div>
+          <label class="form-label fw-bold">Nama</label><input class="form-control mb-3" maxlength="100" value="Dr. Ade Romadhony">
+          <label class="form-label fw-bold">NIDN</label><input class="form-control mb-3" value="0412038801" readonly>
+          <label class="form-label fw-bold">Bidang keahlian <span class="text-muted fw-normal">(min. 1)</span></label>
+          <div class="d-flex flex-wrap gap-2 mb-3"><span class="chip on">Kecerdasan Buatan (AI)</span></div>
+          <div class="d-flex justify-content-between"><label class="form-label fw-bold">Kata kunci keahlian</label><span class="wc" id="kwCount"></span></div>
+          <div class="d-flex flex-wrap gap-2 mb-2" id="kwBox"></div>
+          <div class="input-group"><input class="form-control" id="kwIn" placeholder="Tambah kata kunci lalu Enter"><button class="btn btn-ghost" id="kwAdd">Tambah</button></div>
+          <button class="btn btn-red mt-3" onclick="toast('Profil disimpan.','success')">Simpan profil</button>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="d-flex align-items-center mb-2"><h2 class="sec-title mb-0"><i class="bi bi-bookmark-star"></i>Rekomendasi topik</h2><button class="btn btn-ghost btn-sm ms-auto" onclick="modalTopik.show()"><i class="bi bi-plus-lg me-1"></i>Tambah topik</button></div>
+        <div id="topikList"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="modal fade" id="mTolak" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title fw-bold">Tolak pengajuan</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body"><label class="form-label fw-bold">Alasan penolakan</label><textarea id="alasan" class="form-control" rows="4" placeholder="Jelaskan alasan (min. 10 karakter)"></textarea><div class="invalid-feedback d-block" id="alasanErr"></div></div>
+  <div class="modal-footer"><button class="btn btn-ghost" data-bs-dismiss="modal">Batal</button><button class="btn btn-red" onclick="kirimTolak()">Tolak pengajuan</button></div></div></div></div>
+
+<div class="modal fade" id="mTopik" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title fw-bold">Tambah rekomendasi topik</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body"><label class="form-label fw-bold">Judul <span class="text-muted fw-normal">(maks. 200 karakter)</span></label><input id="tJudul" maxlength="200" class="form-control mb-3">
+    <label class="form-label fw-bold">Deskripsi <span class="text-muted fw-normal">(maks. 1.000 karakter)</span></label><textarea id="tDesk" maxlength="1000" rows="4" class="form-control"></textarea></div>
+  <div class="modal-footer"><button class="btn btn-ghost" data-bs-dismiss="modal">Batal</button><button class="btn btn-red" id="tSimpan">Simpan topik</button></div></div></div></div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="js/data.js"></script><script src="js/app.js"></script>
+<script src="js/dosen.js"></script>
+<script>
+  buildShell('dosen', 'masuk');
+  initViews('masuk');
+
+  var modalTolak = new bootstrap.Modal('#mTolak');
+  var modalTopik = new bootstrap.Modal('#mTopik');
+
+  drawMasuk();
+  drawBimb();
+  drawProfil();
+
+  // tambah kata kunci (max 10)
+  function addKw() {
+    var kata = $('#kwIn').value.trim().toLowerCase();
+    if (kata == '') return;
+
+    if (KW.length >= 10) {
+      toast('Maksimal 10 kata kunci.', 'danger');
+      return;
+    }
+    if (KW.indexOf(kata) == -1) {
+      KW.push(kata);
+    }
+    $('#kwIn').value = '';
+    drawProfil();
+  }
+
+  $('#kwAdd').onclick = addKw;
+  $('#kwIn').addEventListener('keydown', function (e) {
+    if (e.key == 'Enter') {
+      e.preventDefault();
+      addKw();
+    }
+  });
+
+  // simpan topik baru
+  $('#tSimpan').onclick = function () {
+    var judul = $('#tJudul').value.trim();
+    if (!judul) {
+      toast('Judul topik wajib diisi.', 'danger');
+      return;
+    }
+
+    var desk = $('#tDesk').value.trim();
+    if (desk == '') desk = '-';
+
+    TOPIK.unshift({ id: 'x' + Date.now(), judul: judul, desk: desk, aktif: true });
+
+    $('#tJudul').value = '';
+    $('#tDesk').value = '';
+    modalTopik.hide();
+    drawProfil();
+    toast('Topik ditambahkan.', 'success');
+  };
+</script></body></html>
