@@ -168,7 +168,7 @@ function mountRekom(o) {
       animateScores(o.result);
 
       o.btn.disabled = false;
-      o.btn.innerHTML = '<i class="bi bi-calculator me-2"></i>Hitung Kecocokan Dosen';
+      o.btn.innerHTML = '<i class="bi bi-calculator me-2"></i>Hitung Kecocokan';
     }, 650);
   };
 

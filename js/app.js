@@ -423,7 +423,7 @@ function recommend(judul, abstrak) {
     return Math.log((N + 1) / ((df[w] || 0) + 1)) + 1;
   }
 
-  // ubah list token jadi vektor 
+  // ubah list token jadi vektor
   function vec(tokens) {
     var tf = {};
     tokens.forEach(function (w) {
