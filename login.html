@@ -18,19 +18,33 @@
   </section>
   <section class="login-form"><div class="box">
     <h2 class="fw-bold mb-1">Masuk</h2><p class="text-muted mb-4">Pilih peran lalu masuk dengan akun Anda.</p>
-    <div class="role-tabs" id="tabs"><button class="on" data-r="dashboard.html" data-l="NIM atau email">Mahasiswa</button><button data-r="dosen.html" data-l="NIDN atau email">Dosen</button><button data-r="koordinator.html" data-l="Email">Koordinator</button></div>
+    <div class="warn-box mb-3" id="sesiHabis" hidden><i class="bi bi-clock-history me-1"></i>Sesi Anda berakhir karena tidak aktif lebih dari 120 menit. Silakan masuk kembali.</div>
+    <div class="role-tabs" id="tabs"><button class="on" data-role="mhs" data-r="dashboard.html" data-l="NIM atau email">Mahasiswa</button><button data-role="dosen" data-r="dosen.html" data-l="NIDN atau email">Dosen</button><button data-role="koor" data-r="koordinator.html" data-l="Email" id="tabKoor" hidden>Koordinator</button></div>
     <form id="f" novalidate>
       <label class="form-label fw-bold" id="lbl">NIM atau email</label><input class="form-control form-control-lg mb-3" id="u" placeholder="Contoh: 1202230013" style="font-size:15px">
       <label class="form-label fw-bold">Kata sandi</label>
       <div class="input-group mb-2"><input type="password" class="form-control form-control-lg" id="p" placeholder="••••••••" style="font-size:15px"><button class="btn btn-ghost" type="button" id="eye"><i class="bi bi-eye"></i></button></div>
       <div class="invalid-feedback d-block mb-2" id="err"></div>
       <button class="btn btn-red btn-lg w-100 mt-2" style="font-size:15px">Masuk</button>
-      <div class="small text-muted text-center mt-3">Demo: isi bebas, lalu klik Masuk. Sesi di sistem asli berakhir setelah 120 menit tidak aktif.</div>
+      <div class="small text-muted text-center mt-3">Demo: isi bebas, lalu klik Masuk. Sesi berakhir setelah 120 menit tidak aktif.</div>
     </form></div></section>
 </div>
 <script>
-  // halaman tujuan setelah login, default nya mahasiswa
+  // halaman tujuan & peran setelah login, default nya mahasiswa
   var target = 'dashboard.html';
+  var peran = 'mhs';
+  var url = new URLSearchParams(location.search);
+
+  // tab koordinator cuma muncul kalau dibuka lewat login.html?peran=koordinator
+  if (url.get('peran') == 'koordinator') {
+    document.getElementById('tabKoor').hidden = false;
+    document.getElementById('tabs').classList.add('tiga');
+  }
+
+  // dilempar ke sini karena sesi habis (MR-08)
+  if (url.get('sesi') == 'habis') {
+    document.getElementById('sesiHabis').hidden = false;
+  }
 
   // ganti tab peran (mahasiswa / dosen / koordinator)
   document.getElementById('tabs').addEventListener('click', function (e) {
@@ -43,6 +57,7 @@
     }
 
     target = btn.dataset.r;
+    peran = btn.dataset.role;
     document.getElementById('lbl').textContent = btn.dataset.l;
   });
 
@@ -67,6 +82,11 @@
       document.getElementById('err').textContent = 'Isi akun dan kata sandi terlebih dahulu.';
       return;
     }
+
+    // simpan sesi: peran + waktu aktif terakhir
+    try {
+      localStorage.setItem('sd_sesi', JSON.stringify({ role: peran, last: Date.now() }));
+    } catch (err) {}
 
     location.href = target;
   };

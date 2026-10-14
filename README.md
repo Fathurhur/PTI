@@ -11,7 +11,8 @@ Prototipe tampilan (HTML + Bootstrap 5 + JavaScript) dengan data contoh.
 ## Halaman
 | File | Peran | Isi |
 |---|---|---|
-| login.html | Semua | Login + pilih peran (isi bebas untuk demo) |
+| login.html | Semua | Login + pilih peran (isi bebas untuk demo). Tab Koordinator hanya muncul lewat `login.html?peran=koordinator` |
+| 403.html | Semua | Akses ditolak bila membuka halaman peran lain |
 | dashboard.html | Mahasiswa | Dashboard slot real-time, filter, rekomendasi, status pengajuan |
 | cari.html | Mahasiswa | Cari dosen + Top 5 rekomendasi |
 | pengajuan.html | Mahasiswa | Status, timeline, posisi antrean, batalkan |
@@ -26,6 +27,8 @@ Prototipe tampilan (HTML + Bootstrap 5 + JavaScript) dengan data contoh.
 - `js/mahasiswa.js`, `js/dosen.js`, `js/koordinator.js` — logika per peran.
 
 ## Catatan
-- Pembaruan real-time memakai polling 5 detik (disimulasikan acak). Di Laravel: ganti dengan `fetch()` ke endpoint JSON.
-- Klik **Panel Demo** (kanan bawah) untuk reset data atau mensimulasikan slot dosen terbuka.
-- Data pengajuan mahasiswa disimpan di localStorage browser, hanya untuk demo.
+- Ketiga peran memakai **satu data bersama** di localStorage (key `sd_db_v3`), jadi keputusan dosen/koordinator langsung terlihat di halaman mahasiswa (juga antar-tab). Sesi login disimpan di key `sd_sesi`.
+- Satu browser hanya bisa login sebagai satu peran. Untuk berganti peran, klik **Keluar** lalu masuk lagi.
+- Sesi berakhir setelah 120 menit tidak aktif. Membuka halaman peran lain diarahkan ke `403.html`.
+- Pembaruan real-time memakai polling 5 detik (angka dosen contoh diacak). Di Laravel: ganti dengan `fetch()` ke endpoint JSON.
+- **Panel Demo** (kanan bawah): simulasi slot Dr. Helmy/Pak Adib terbuka, slot terakhir Pak Philip direbut (memicu tawaran antrean), sesi habis, dan reset data demo.

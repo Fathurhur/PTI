@@ -218,6 +218,29 @@ a {
   color: var(--muted);
 }
 
+/* notif yg belum dibaca */
+.notif-item.baru {
+  background: var(--red-soft);
+}
+
+.notif-item.baru div {
+  font-weight: 600;
+}
+
+#notifList {
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.notif-foot {
+  padding: 9px 14px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+  background: #FAFAFB;
+  border-radius: 0 0 14px 14px;
+}
+
 /* avatar */
 .av {
   width: 56px;
@@ -299,6 +322,13 @@ a {
   padding: 6px 12px;
   border-radius: 99px;
   white-space: nowrap;
+}
+
+/* periode lagi ditutup / di luar tanggal */
+.welcome .chip-periode.tutup {
+  background: var(--gray-soft);
+  border-color: #D1D5DB;
+  color: #4B5563;
 }
 
 .grid-3 {
@@ -715,6 +745,15 @@ h6 {
   font-size: 13px;
 }
 
+/* kotak hijau, misal pas pembimbing udah ditetapkan */
+.ok-box {
+  background: var(--green-soft);
+  color: #0B5A40;
+  border-radius: 12px;
+  padding: 10px 13px;
+  font-size: 13px;
+}
+
 /* timeline / stepper */
 .tl {
   list-style: none;
@@ -979,12 +1018,16 @@ h6 {
 
 .role-tabs {
   display: grid;
-  grid-template-columns: repeat(3,1fr);
+  grid-template-columns: repeat(2,1fr);
   gap: 6px;
   background: var(--gray-soft);
   padding: 5px;
   border-radius: 13px;
   margin-bottom: 22px;
+}
+
+.role-tabs.tiga {
+  grid-template-columns: repeat(3,1fr);
 }
 
 .role-tabs button {

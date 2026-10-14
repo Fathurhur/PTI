@@ -10,7 +10,7 @@
 <main class="page">
   <div class="welcome"><span class="emoji">🎉</span>
     <div><b>Selamat datang, Muhammad Fathurrohman!</b> <span class="text-muted">— Cari, ajukan, dan pantau status dosen pembimbingmu secara real-time.</span></div>
-    <span class="chip-periode"><i class="bi bi-calendar-event me-1"></i>Periode Ganjil 2026/2027 · ditutup 30 Okt</span></div>
+    <span class="chip-periode" id="chipPeriode"></span></div>
 
   <div class="grid-3">
     <!-- Kiri: kategori & cari cepat -->
@@ -75,9 +75,11 @@
     footer: '<a class="btn btn-ghost w-100 mt-2" href="cari.html">Lihat 5 rekomendasi teratas</a>'
   });
 
-  // kartu status pengajuan
+  // kartu status pengajuan + chip periode
   renderStatusCard($('#status'));
+  renderChipPeriode();
   document.addEventListener('pengajuan:changed', function () {
     renderStatusCard($('#status'));
+    renderChipPeriode();
   });
 </script></body></html>

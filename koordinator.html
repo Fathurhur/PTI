@@ -21,10 +21,11 @@
       <div class="col-lg-4"><h2 class="sec-title"><i class="bi bi-calendar-range"></i>Periode</h2>
         <div class="card-x pad">
           <div class="d-flex justify-content-between align-items-center mb-3"><b>Ganjil 2026/2027</b><span id="pStatus"></span></div>
-          <label class="form-label fw-bold">Tanggal mulai</label><input type="date" class="form-control mb-3" value="2026-09-15">
-          <label class="form-label fw-bold">Tanggal selesai</label><input type="date" class="form-control mb-3" value="2026-10-30">
+          <label class="form-label fw-bold">Tanggal mulai</label><input type="date" class="form-control mb-3" id="pMulai">
+          <label class="form-label fw-bold">Tanggal selesai</label><input type="date" class="form-control mb-3" id="pSelesai">
           <div class="small text-muted mb-3">Pengajuan di luar periode ditolak sistem.</div>
-          <button class="btn btn-red w-100" id="btnPeriode" onclick="periodeBuka=!periodeBuka;drawPeriode();toast(periodeBuka?'Periode dibuka.':'Periode ditutup.','dark')"></button></div></div>
+          <button class="btn btn-ghost w-100 mb-2" onclick="simpanPeriode()"><i class="bi bi-save me-1"></i>Simpan tanggal</button>
+          <button class="btn btn-red w-100" id="btnPeriode" onclick="bukaTutupPeriode()"></button></div></div>
       <div class="col-lg-8"><h2 class="sec-title"><i class="bi bi-sliders"></i>Kuota per dosen</h2>
         <div class="card-x"><div style="overflow-x:auto"><table class="table-x"><thead><tr><th>Dosen</th><th>Terisi</th><th>Kuota (0–20)</th><th>Status</th></tr></thead><tbody id="kuotaBody"></tbody></table></div>
           <div class="p-3 border-top d-flex justify-content-between align-items-center flex-wrap gap-2"><span class="small text-muted">Kuota awal 6 per dosen. Tidak boleh di bawah jumlah yang sudah terisi.</span><button class="btn btn-red" onclick="simpanKuota()">Simpan kuota</button></div></div></div>
@@ -48,12 +49,22 @@
 <script src="js/data.js"></script><script src="js/app.js"></script>
 <script src="js/koordinator.js"></script>
 <script>
-  buildShell('koor', 'rekap');
-  initViews('rekap');
+  if (buildShell('koor', 'rekap')) {
+    initViews('rekap');
 
-  drawRekap();
-  drawKuota();
-  drawPeriode();
-  drawSah();
-  initImpor();
+    drawRekap();
+    drawKuota();
+    isiTanggalPeriode();
+    drawPeriode();
+    drawSah();
+    initImpor();
+
+    // gambar ulang kalau data berubah (misal dosen baru nerima mahasiswa)
+    document.addEventListener('pengajuan:changed', function () {
+      drawRekap();
+      drawKuota();
+      drawPeriode();
+      drawSah();
+    });
+  }
 </script></body></html>

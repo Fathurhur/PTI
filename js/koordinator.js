@@ -1,20 +1,10 @@
 // koordinator.js
 // script buat halaman koordinator TA / kaprodi
+// data kuota, periode, sama penetapan diambil dari DB (app.js)
 
-// simpan kuota tiap dosen (key nya id dosen)
-var KUOTA = {};
-DOSEN.forEach(function (d) {
-  KUOTA[d.id] = d.kuota;
-});
-
-// daftar yg perlu disahkan, sp = nomor surat penetapan (null kalo belum)
-var SAH = [
-  {id:1, mhs:'Rafi Aditya',   dosen:'Dr. Ade Romadhony',  judul:'Deteksi Ujaran Kebencian di Media Sosial', sp:null},
-  {id:2, mhs:'Salsa Maharani',dosen:'Dr. Ade Romadhony',  judul:'Ringkasan Teks Otomatis Artikel Berita', sp:'SP-TA/2026-1/009'},
-  {id:3, mhs:'Kevin Hartono', dosen:'Dr. Rina Kusuma',    judul:'Prediksi Permintaan Barang dengan LSTM', sp:null},
-  {id:4, mhs:'Putri Ayu',     dosen:'Dr. Sari Wulandari', judul:'Enterprise Architecture TOGAF untuk UMKM', sp:null}
-];
-var urut = 9; // nomor urut surat berikutnya
+// kuota yg udah diketik tapi belum disimpan (key nya id dosen)
+// biar ga ketiban pas halaman digambar ulang
+var draftKuota = {};
 
 
 // ===== REKAP BEBAN =====
@@ -44,12 +34,12 @@ function drawRekap() {
   // urutkan dari yg bebannya paling banyak
   var urutDosen = DOSEN.slice();
   urutDosen.sort(function (a, b) {
-    return b.terisi / b.kuota - a.terisi / a.kuota;
+    return b.terisi / (b.kuota || 1) - a.terisi / (a.kuota || 1);
   });
 
   var htmlBar = '';
   urutDosen.forEach(function (d) {
-    var persen = Math.round(d.terisi / d.kuota * 100);
+    var persen = d.kuota ? Math.min(100, Math.round(d.terisi / d.kuota * 100)) : 100;
     var warna = '';
     if (persen >= 100) warna = 'full';
     else if (persen >= 75) warna = 'warn';
@@ -86,19 +76,46 @@ function exportCSV() {
 }
 
 
+
 // ===== KUOTA =====
+// baris tabel dibikin sekali, abis itu cuma angkanya yg diupdate
+// biar input yg lagi diketik ga ilang pas data berubah
 function drawKuota() {
-  var html = '';
+  var body = $('#kuotaBody');
+
+  if (body.children.length != DOSEN.length) {
+    var html = '';
+    DOSEN.forEach(function (d) {
+      html += `<tr data-row="${d.id}"><td><div class="d-flex align-items-center gap-2">${avatar(d,'xs')}<b class="k-nama">${esc(d.nama)}</b></div></td>
+      <td class="k-terisi"></td><td style="width:140px"><input type="number" min="0" max="20" class="form-control form-control-sm" data-k="${d.id}"></td>
+      <td class="k-status"></td></tr>`;
+    });
+    body.innerHTML = html;
+
+    $$('[data-k]', body).forEach(function (input) {
+      input.addEventListener('input', function () {
+        draftKuota[input.dataset.k] = input.value;
+      });
+    });
+  }
+
   DOSEN.forEach(function (d) {
-    html += `<tr><td><div class="d-flex align-items-center gap-2">${avatar(d,'xs')}<b>${esc(d.nama)}</b></div></td>
-    <td>${d.terisi}</td><td style="width:140px"><input type="number" min="0" max="20" class="form-control form-control-sm" value="${KUOTA[d.id]}" data-k="${d.id}"></td>
-    <td><span class="badge-s ${statusDosen(d)}">${statusDosen(d)}</span></td></tr>`;
+    var row = $('[data-row="' + d.id + '"]', body);
+    $('.k-nama', row).textContent = d.nama;
+    $('.k-terisi', row).textContent = d.terisi + (d.antrean ? ' · antrean ' + d.antrean : '');
+    $('.k-status', row).innerHTML = `<span class="badge-s ${statusDosen(d)}">${statusDosen(d)}</span>`;
+
+    var input = $('[data-k]', row);
+    if (draftKuota[d.id] === undefined && document.activeElement !== input) {
+      input.value = d.kuota;
+    }
   });
-  $('#kuotaBody').innerHTML = html;
 }
 
 function simpanKuota() {
+  DB.segarkan();
   var valid = true;
+  var peta = {};
 
   $$('[data-k]').forEach(function (input) {
     var nilai = Number(input.value);
@@ -106,13 +123,13 @@ function simpanKuota() {
     var d = findDosen(id);
 
     // kuota harus bilangan bulat 0-20 dan ga boleh kurang dari yg udah terisi
-    var salah = !Number.isInteger(nilai) || nilai < 0 || nilai > 20 || nilai < d.terisi;
+    var salah = input.value === '' || !Number.isInteger(nilai) || nilai < 0 || nilai > 20 || nilai < d.terisi;
     input.classList.toggle('is-invalid', salah);
 
     if (salah) {
       valid = false;
     } else {
-      KUOTA[id] = nilai;
+      peta[id] = nilai;
     }
   });
 
@@ -121,72 +138,137 @@ function simpanKuota() {
     return;
   }
 
-  DOSEN.forEach(function (d) {
-    d.kuota = KUOTA[d.id];
-  });
-  drawRekap();
-  drawKuota();
-  toast('Kuota tersimpan.', 'success');
+  draftKuota = {};
+  DB.setKuota(peta); // kalau kuota naik, antrean otomatis maju
+  toast('Kuota tersimpan. Antrean diproses otomatis bila ada slot baru.', 'success');
 }
 
 
 // ===== PERIODE =====
-var periodeBuka = PERIODE.buka;
+// isi input tanggal dari DB (dipanggil pas halaman dibuka & abis disimpan)
+function isiTanggalPeriode() {
+  $('#pMulai').value = DB.data.periode.mulai;
+  $('#pSelesai').value = DB.data.periode.selesai;
+}
+
+// ambil & cek tanggal dari input, null kalau ga valid
+function bacaTanggalPeriode() {
+  var mulai = $('#pMulai').value;
+  var selesai = $('#pSelesai').value;
+
+  if (!mulai || !selesai) {
+    toast('Tanggal mulai dan selesai wajib diisi.', 'danger');
+    return null;
+  }
+  if (mulai > selesai) {
+    toast('Tanggal mulai tidak boleh setelah tanggal selesai.', 'danger');
+    return null;
+  }
+  return { mulai: mulai, selesai: selesai };
+}
+
+function simpanPeriode() {
+  var t = bacaTanggalPeriode();
+  if (!t) return;
+
+  DB.setPeriode(t.mulai, t.selesai, DB.data.periode.buka);
+  isiTanggalPeriode();
+  toast('Tanggal periode disimpan: ' + fmtDate(t.mulai) + ' – ' + fmtDate(t.selesai) + '.', 'success');
+}
+
+function bukaTutupPeriode() {
+  var t = bacaTanggalPeriode();
+  if (!t) return;
+
+  var buka = !DB.data.periode.buka;
+  DB.setPeriode(t.mulai, t.selesai, buka);
+  isiTanggalPeriode();
+  toast(buka ? 'Periode dibuka.' : 'Periode ditutup. Mahasiswa tidak bisa mengajukan.', 'dark');
+}
 
 function drawPeriode() {
   var btn = $('#btnPeriode');
-  if (periodeBuka) {
-    $('#pStatus').innerHTML = '<span class="live">Periode dibuka</span>';
-    btn.textContent = 'Tutup periode';
-    btn.className = 'btn btn-ghost text-danger';
-  } else {
+  var pr = DB.data.periode;
+
+  if (!pr.buka) {
     $('#pStatus').innerHTML = '<span class="sbadge sb-Dibatalkan">Periode ditutup</span>';
     btn.textContent = 'Buka periode';
-    btn.className = 'btn btn-red';
+    btn.className = 'btn btn-red w-100';
+  } else {
+    if (periodeAktif().ok) {
+      $('#pStatus').innerHTML = '<span class="live">Periode dibuka</span>';
+    } else {
+      // dibuka, tapi hari ini di luar tanggal mulai - selesai
+      $('#pStatus').innerHTML = '<span class="sbadge sb-Menunggu" title="Mahasiswa tetap tidak bisa mengajukan">Dibuka · di luar rentang tanggal</span>';
+    }
+    btn.textContent = 'Tutup periode';
+    btn.className = 'btn btn-ghost text-danger w-100';
   }
 }
 
 
 // ===== PENGESAHAN =====
 function drawSah() {
+  // yg belum disahkan di atas, terus yg udah ditetapkan urut nomor surat
+  var list = DB.data.pengajuan.filter(function (p) {
+    return p.status == 'Diterima' || p.status == 'Ditetapkan';
+  }).sort(function (a, b) {
+    if (a.status != b.status) return a.status == 'Diterima' ? -1 : 1;
+    if (a.status == 'Diterima') return a.tglKeputusan - b.tglKeputusan;
+    return a.sp < b.sp ? -1 : 1;
+  });
+
+  if (list.length == 0) {
+    $('#sahBody').innerHTML = `<tr><td colspan="5"><div class="empty"><i class="bi bi-patch-check"></i>Belum ada pengajuan yang diterima dosen.</div></td></tr>`;
+    return;
+  }
+
   var html = '';
-  for (var i = 0; i < SAH.length; i++) {
-    var s = SAH[i];
+  list.forEach(function (p) {
+    var d = findDosen(p.dosenId);
     var status, aksi;
 
-    if (s.sp) {
-      status = `<span class="sbadge sb-Ditetapkan">${s.sp}</span>`;
-      aksi = `<button class="btn btn-ghost btn-sm" onclick="unduh('${s.sp}')"><i class="bi bi-file-earmark-pdf me-1"></i>PDF</button>`;
+    if (p.status == 'Ditetapkan') {
+      status = `<span class="sbadge sb-Ditetapkan">${esc(p.sp)}</span>`;
+      aksi = `<button class="btn btn-ghost btn-sm" onclick="unduhSurat(${p.id})"><i class="bi bi-file-earmark-pdf me-1"></i>PDF</button>`;
     } else {
       status = '<span class="sbadge sb-Menunggu">Diterima dosen</span>';
-      aksi = `<button class="btn btn-red btn-sm" onclick="sahkan(${s.id})"><i class="bi bi-patch-check me-1"></i>Sahkan</button>`;
+      if (p.klarifikasi) {
+        status += ' <span class="sbadge sb-Ditolak mt-1">Klarifikasi diminta</span>';
+      }
+      aksi = `<button class="btn btn-red btn-sm" onclick="sahkan(${p.id})"><i class="bi bi-patch-check me-1"></i>Sahkan</button>
+        <button class="btn btn-ghost btn-sm" onclick="mintaKlarifikasi(${p.id})" ${p.klarifikasi ? 'disabled' : ''}><i class="bi bi-question-circle me-1"></i>Minta klarifikasi</button>`;
     }
 
-    html += `<tr><td><b>${s.mhs}</b></td><td>${s.dosen}</td><td>${s.judul}</td>
+    html += `<tr><td><b>${esc(p.mhs)}</b><div class="small text-muted">${esc(p.nim)}</div></td><td>${esc(d.nama)}</td><td>${esc(p.judul)}</td>
     <td>${status}</td>
     <td class="text-end text-nowrap">${aksi}</td></tr>`;
-  }
+  });
   $('#sahBody').innerHTML = html;
 }
 
 function sahkan(id) {
-  var s = SAH.find(function (x) {
-    return x.id === id;
-  });
-
-  // format nomor: SP-TA/<periode>/<urut 3 digit>
-  var noUrut = String(urut).padStart(3, '0');
-  urut++;
-  s.sp = 'SP-TA/' + PERIODE.kode + '/' + noUrut;
-
-  drawSah();
-  toast('Disahkan. Surat penetapan ' + s.sp + ' diterbitkan.', 'success');
+  var r = DB.sahkan(id);
+  if (!r.ok) {
+    toast(r.msg, 'danger');
+    return;
+  }
+  toast('Disahkan. Surat penetapan ' + r.p.sp + ' diterbitkan.', 'success');
 }
 
-function unduh(no) {
-  // belum beneran download, cuma demo
-  toast('Demo: di sistem asli ini mengunduh PDF ' + no + '.', 'dark');
+function mintaKlarifikasi(id) {
+  var r = DB.klarifikasi(id);
+  if (!r.ok) {
+    toast(r.msg, 'danger');
+    return;
+  }
+  toast('Permintaan klarifikasi dikirim ke ' + findDosen(r.p.dosenId).nama + '.', 'dark');
 }
+
+function unduhSurat(id) {
+  bukaSurat(DB.cari(id));
+}
+
 
 
 // ===== IMPOR CSV =====

@@ -3,8 +3,7 @@
 
 // dipanggil paling awal di tiap halaman mahasiswa
 function bootMhs(active) {
-  buildShell('mhs', active);
-  State.load();
+  if (!buildShell('mhs', active)) return;
   injectAjukanUI();
   Live.start();
 }
@@ -39,7 +38,7 @@ function mountDosenList(o) {
 
     // gabungin semua teks dosen biar bisa dicari
     var namaBidang = d.bidang.map(function (i) { return BIDANG[i]; }).join(' ');
-    var judulTopik = d.topik.map(function (t) { return t.judul; }).join(' ');
+    var judulTopik = topikAktif(d).map(function (t) { return t.judul; }).join(' ');
     var teks = (d.nama + ' ' + d.kata.join(' ') + ' ' + namaBidang + ' ' + judulTopik).toLowerCase();
 
     if (q && !teks.includes(q)) return false;
@@ -177,10 +176,13 @@ function mountRekom(o) {
 
 
 // ===== STATUS PENGAJUAN =====
-// langkah2 buat timeline, cls: done / now / todo
+// langkah2 buat timeline, cls: done / now / todo / bad
 function stepsFor(p) {
   var tgl = fmtDate(p.tgl);
-  var batas = fmtDate(p.tgl + 7 * 24 * 60 * 60 * 1000); // 7 hari
+  var mulai = p.tglMenunggu || p.tgl;
+  var batas = fmtDate(mulai + BATAS_KEPUTUSAN); // 7 hari
+  var kirim = { cls: 'done', t: 'Pengajuan dikirim', sub: tgl + ' · slot terkunci' };
+  var pilihLain = { cls: 'now', t: 'Pilih dosen lain', sub: 'Anda bisa langsung mengajukan ke dosen lain' };
 
   if (p.status == 'Antrean') {
     return [
@@ -194,10 +196,43 @@ function stepsFor(p) {
 
   if (p.status == 'Menunggu') {
     return [
-      { cls: 'done', t: 'Pengajuan dikirim', sub: tgl + ' · slot terkunci' },
+      kirim,
       { cls: 'now', t: 'Menunggu keputusan dosen', sub: 'Batas keputusan ' + batas },
       { cls: 'todo', t: 'Diterima dosen', sub: '' },
       { cls: 'todo', t: 'Ditetapkan koordinator', sub: 'Surat penetapan PDF' }
+    ];
+  }
+
+  if (p.status == 'Diterima') {
+    return [
+      kirim,
+      { cls: 'done', t: 'Diterima dosen', sub: fmtDate(p.tglKeputusan) },
+      { cls: 'now', t: 'Menunggu pengesahan koordinator', sub: 'Surat penetapan terbit setelah disahkan' },
+      { cls: 'todo', t: 'Ditetapkan koordinator', sub: 'Surat penetapan PDF' }
+    ];
+  }
+
+  if (p.status == 'Ditetapkan') {
+    return [
+      kirim,
+      { cls: 'done', t: 'Diterima dosen', sub: fmtDate(p.tglKeputusan) },
+      { cls: 'done', t: 'Ditetapkan koordinator', sub: 'Nomor ' + p.sp + ' · ' + fmtDate(p.tglSah) }
+    ];
+  }
+
+  if (p.status == 'Ditolak') {
+    return [
+      kirim,
+      { cls: 'bad', t: 'Ditolak dosen', sub: fmtDate(p.tglKeputusan) },
+      pilihLain
+    ];
+  }
+
+  if (p.status == 'Kedaluwarsa') {
+    return [
+      kirim,
+      { cls: 'bad', t: 'Kedaluwarsa', sub: 'Tidak ada keputusan dosen dalam 7 × 24 jam' },
+      pilihLain
     ];
   }
 
@@ -208,11 +243,70 @@ function tlHTML(steps) {
   var html = '<ul class="tl">';
   for (var i = 0; i < steps.length; i++) {
     var s = steps[i];
-    var centang = s.cls == 'done' ? '<i class="bi bi-check"></i>' : '';
-    html += `<li class="${s.cls}"><span class="dot">${centang}</span><b>${esc(s.t)}</b><small>${esc(s.sub)}</small></li>`;
+    var tanda = '';
+    if (s.cls == 'done') tanda = '<i class="bi bi-check"></i>';
+    if (s.cls == 'bad') tanda = '<i class="bi bi-x"></i>';
+    html += `<li class="${s.cls}"><span class="dot">${tanda}</span><b>${esc(s.t)}</b><small>${esc(s.sub)}</small></li>`;
   }
   html += '</ul>';
   return html;
+}
+
+// judul besar di atas status
+function judulStatus(p) {
+  var judul = {
+    Antrean: 'Dalam antrean #' + p.posisi,
+    Menunggu: 'Menunggu keputusan dosen',
+    Diterima: 'Diterima dosen, menunggu pengesahan',
+    Ditetapkan: 'Pembimbing resmi ditetapkan',
+    Ditolak: 'Pengajuan ditolak dosen',
+    Kedaluwarsa: 'Pengajuan kedaluwarsa'
+  };
+  return judul[p.status] || p.status;
+}
+
+// kotak info sesuai status (sisa waktu, alasan tolak, nomor surat, dll)
+function infoStatusHTML(p) {
+  if (p.status == 'Menunggu') {
+    var sisaMs = Math.max(0, (p.tglMenunggu || p.tgl) + BATAS_KEPUTUSAN - Date.now());
+    var hari = Math.floor(sisaMs / HARI);
+    var jam = Math.floor(sisaMs % HARI / JAM);
+    return `<div class="warn-box"><i class="bi bi-clock-history me-1"></i>Sisa waktu keputusan dosen: <b>${hari} hari ${jam} jam</b>. Lewat dari itu pengajuan berstatus <b>Kedaluwarsa</b> dan slot dilepas.</div>`;
+  }
+  if (p.status == 'Antrean') {
+    return `<div class="hint-box"><i class="bi bi-bell me-1"></i>Anda akan menerima notifikasi in-app dan email saat giliran Anda tiba.</div>`;
+  }
+  if (p.status == 'Diterima') {
+    var klar = p.klarifikasi ? ' Koordinator sedang meminta klarifikasi ke dosen, jadi pengesahan ditunda sementara.' : '';
+    return `<div class="hint-box"><i class="bi bi-hourglass-split me-1"></i>Dosen sudah menerima pengajuan Anda. Koordinator akan mengesahkan dan menerbitkan surat penetapan.${klar}</div>`;
+  }
+  if (p.status == 'Ditetapkan') {
+    return `<div class="ok-box"><i class="bi bi-patch-check-fill me-1"></i>Selamat! Pembimbing Anda resmi ditetapkan dengan nomor surat <b>${esc(p.sp)}</b>.</div>`;
+  }
+  if (p.status == 'Ditolak') {
+    return `<div class="warn-box"><i class="bi bi-chat-left-text me-1"></i><b>Alasan penolakan:</b> ${esc(p.alasan)}</div>`;
+  }
+  if (p.status == 'Kedaluwarsa') {
+    return `<div class="warn-box"><i class="bi bi-hourglass-bottom me-1"></i>Dosen tidak memberi keputusan dalam 7 × 24 jam, jadi slot dilepas otomatis. Silakan pilih dosen lain.</div>`;
+  }
+  return '';
+}
+
+// tutup hasil Ditolak/Kedaluwarsa, pindah = langsung ke halaman cari
+function pilihDosenLain(pindah) {
+  State.tutupHasil();
+  if (pindah) location.href = 'cari.html';
+}
+
+// tombol aksi sesuai status
+function aksiStatusHTML(p, pindah) {
+  if (p.status == 'Ditolak' || p.status == 'Kedaluwarsa') {
+    return `<button class="btn btn-red w-100" onclick="pilihDosenLain(${pindah ? 'true' : 'false'})"><i class="bi bi-arrow-repeat me-1"></i>Pilih dosen lain</button>`;
+  }
+  if (p.status == 'Ditetapkan') {
+    return `<button class="btn btn-red w-100" onclick="bukaSurat(State.p)"><i class="bi bi-file-earmark-pdf me-1"></i>Unduh surat penetapan (PDF)</button>`;
+  }
+  return '';
 }
 
 // kartu status di dashboard
@@ -226,12 +320,16 @@ function renderStatusCard(el) {
 
   var d = findDosen(p.dosenId);
   var posisi = p.status == 'Antrean' ? ' #' + p.posisi : '';
+  var aksi = aksiStatusHTML(p, false);
 
-  el.innerHTML = `<div class="d-flex justify-content-between align-items-start gap-2 mb-3">
+  el.innerHTML = `<div class="d-flex justify-content-between align-items-start gap-2 mb-2">
       <div class="d-flex gap-2 align-items-center">${avatar(d,'xs')}<div><b>${esc(d.nama)}</b><div class="small text-muted">${esc(p.asal)}</div></div></div>
       <span class="sbadge sb-${p.status}">${p.status}${posisi}</span></div>
+    <div class="fw-bold mb-3">${esc(judulStatus(p))}</div>
     ${tlHTML(stepsFor(p))}
-    <a href="pengajuan.html" class="btn btn-ghost w-100 mt-3">Lihat detail</a>`;
+    <div class="mt-3">${infoStatusHTML(p)}</div>
+    ${aksi ? '<div class="mt-3">' + aksi + '</div>' : ''}
+    <a href="pengajuan.html" class="btn btn-ghost w-100 mt-2">Lihat detail</a>`;
 }
 
 
@@ -247,82 +345,76 @@ function renderPengajuanPage(el) {
 
   var d = findDosen(p.dosenId);
 
-  // hitung sisa waktu sampe batas 7 hari
-  var SATU_HARI = 24 * 60 * 60 * 1000;
-  var SATU_JAM = 60 * 60 * 1000;
-  var batas = p.tgl + 7 * SATU_HARI;
-  var sisaMs = Math.max(0, batas - Date.now());
-  var hari = Math.floor(sisaMs / SATU_HARI);
-  var jam = Math.floor(sisaMs % SATU_HARI / SATU_JAM);
-
-  var judulStatus = '';
-  if (p.status == 'Antrean') {
-    judulStatus = 'Dalam antrean #' + p.posisi;
-  } else {
-    judulStatus = 'Menunggu keputusan dosen';
-  }
-
   var namaBidang = d.bidang.map(function (i) {
     return BIDANG[i];
   }).join(' · ');
 
-  var infoBox = '';
-  if (p.status == 'Menunggu') {
-    infoBox = `<div class="warn-box mb-3"><i class="bi bi-clock-history me-1"></i>Sisa waktu keputusan dosen: <b>${hari} hari ${jam} jam</b>. Lewat dari itu pengajuan berstatus <b>Kedaluwarsa</b> dan slot dilepas.</div>`;
+  // bagian bawah kartu: tombol batal cuma buat Menunggu / Antrean
+  var bawah = '';
+  if (p.status == 'Menunggu' || p.status == 'Antrean') {
+    bawah = '<button class="btn btn-ghost text-danger" id="btnBatal"><i class="bi bi-x-circle me-1"></i>Batalkan pengajuan</button>';
+  } else if (p.status == 'Diterima') {
+    bawah = '<div class="small text-muted"><i class="bi bi-lock me-1"></i>Pengajuan yang sudah diterima dosen tidak bisa dibatalkan sendiri. Hubungi koordinator TA bila perlu perubahan.</div>';
   } else {
-    infoBox = `<div class="hint-box mb-3"><i class="bi bi-bell me-1"></i>Anda akan menerima notifikasi in-app dan email saat giliran Anda tiba.</div>`;
+    bawah = aksiStatusHTML(p, true);
+  }
+
+  var noSurat = '';
+  if (p.sp) {
+    noSurat = `<div><span class="text-muted">Nomor surat</span><br><b>${esc(p.sp)}</b></div>`;
   }
 
   el.innerHTML = `<div class="row g-4">
     <div class="col-lg-7"><div class="card-x pad">
       <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
-        <div><div class="text-muted small fw-bold text-uppercase">Status saat ini</div><h4 class="fw-bold mb-0">${esc(judulStatus)}</h4></div>
+        <div><div class="text-muted small fw-bold text-uppercase">Status saat ini</div><h4 class="fw-bold mb-0">${esc(judulStatus(p))}</h4></div>
         <span class="sbadge sb-${p.status}">${p.status}</span></div>
       <div class="d-flex gap-3 align-items-center card-x pad mb-3" style="box-shadow:none;background:#FAFAFB">${avatar(d,'sm')}
         <div class="flex-grow-1"><b>${esc(d.nama)}</b><div class="small text-muted">${namaBidang}</div></div>
         <button class="btn btn-ghost btn-sm" data-detail="${d.id}">Profil</button></div>
       <div class="mb-3"><div class="small text-muted fw-bold text-uppercase">Judul</div><div class="fw-bold">${esc(p.judul)}</div></div>
       <div class="mb-3"><div class="small text-muted fw-bold text-uppercase">Abstrak</div><div class="small" style="line-height:1.6">${esc(p.abstrak)}</div></div>
-      <div class="d-flex gap-4 small flex-wrap"><div><span class="text-muted">Asal topik</span><br><b>${esc(p.asal)}</b></div><div><span class="text-muted">Dikirim</span><br><b>${fmtDate(p.tgl)}</b></div><div><span class="text-muted">Periode</span><br><b>${PERIODE.nama}</b></div></div>
-      <hr><button class="btn btn-ghost text-danger" id="btnBatal"><i class="bi bi-x-circle me-1"></i>Batalkan pengajuan</button>
+      <div class="d-flex gap-4 small flex-wrap"><div><span class="text-muted">Asal topik</span><br><b>${esc(p.asal)}</b></div><div><span class="text-muted">Dikirim</span><br><b>${fmtDate(p.tgl)}</b></div><div><span class="text-muted">Periode</span><br><b>${PERIODE.nama}</b></div>${noSurat}</div>
+      <hr>${bawah}
     </div></div>
     <div class="col-lg-5">
       <div class="card-x pad mb-3"><div class="sec-title"><i class="bi bi-signpost-split"></i>Perjalanan pengajuan</div>${tlHTML(stepsFor(p))}</div>
-      ${infoBox}
+      <div class="mb-3">${infoStatusHTML(p)}</div>
       <div class="card-x pad small text-muted"><b class="text-dark d-block mb-1">Aturan singkat</b>1 mahasiswa hanya boleh punya 1 pengajuan aktif per periode. Penolakan dosen selalu disertai alasan.</div>
     </div></div>`;
 
-  $('#btnBatal').onclick = function () {
-    if (confirm('Batalkan pengajuan ini? Slot akan dilepas.')) {
-      State.batalkan();
-      toast('Pengajuan dibatalkan.', 'dark');
-    }
-  };
+  var btnBatal = $('#btnBatal');
+  if (btnBatal) {
+    btnBatal.onclick = function () {
+      if (confirm('Batalkan pengajuan ini? Slot akan dilepas.')) {
+        State.batalkan(); // toast muncul dari DB.beritahu
+      }
+    };
+  }
 }
 
 
 // ===== HALAMAN RIWAYAT =====
+// keterangan singkat tiap baris riwayat
+function ketRiwayat(p) {
+  if (p.status == 'Menunggu') return 'Menunggu keputusan dosen hingga ' + fmtDate((p.tglMenunggu || p.tgl) + BATAS_KEPUTUSAN) + '.';
+  if (p.status == 'Antrean') return 'Antrean urutan #' + p.posisi + '.';
+  if (p.status == 'Diterima') return 'Diterima dosen ' + fmtDate(p.tglKeputusan) + ', menunggu pengesahan koordinator.';
+  if (p.status == 'Ditetapkan') return 'Ditetapkan koordinator · ' + p.sp;
+  if (p.status == 'Ditolak') return p.alasan;
+  if (p.status == 'Kedaluwarsa') return 'Tidak ada keputusan dosen dalam 7 × 24 jam.';
+  if (p.status == 'Dibatalkan') return 'Dibatalkan oleh mahasiswa.';
+  return '-';
+}
+
 function mountRiwayat(o) {
   var filterAktif = 'Semua';
 
   function ambilData() {
-    var semua = [];
-
-    // pengajuan yg masih aktif ditaruh paling atas
-    if (State.p) {
-      semua.push({
-        judul: State.p.judul,
-        dosen: findDosen(State.p.dosenId).nama,
-        status: State.p.status,
-        tgl: State.p.tgl,
-        ket: 'Pengajuan aktif saat ini.'
-      });
-    }
-    semua = semua.concat(State.riwayat);
-
+    var semua = State.semua();
     if (filterAktif == 'Semua') return semua;
-    return semua.filter(function (r) {
-      return r.status === filterAktif;
+    return semua.filter(function (p) {
+      return p.status === filterAktif;
     });
   }
 
@@ -335,15 +427,16 @@ function mountRiwayat(o) {
     }
 
     var html = '';
-    data.forEach(function (x) {
-      html += `<tr><td class="text-nowrap">${fmtDate(x.tgl)}</td><td><b>${esc(x.judul)}</b></td><td>${esc(x.dosen)}</td>
-      <td><span class="sbadge sb-${x.status}">${x.status}</span></td><td class="small text-muted">${esc(x.ket||'-')}</td></tr>`;
+    data.forEach(function (p) {
+      var d = findDosen(p.dosenId);
+      html += `<tr><td class="text-nowrap">${fmtDate(p.tgl)}</td><td><b>${esc(p.judul)}</b></td><td>${esc(d.nama)}</td>
+      <td><span class="sbadge sb-${p.status}">${p.status}</span></td><td class="small text-muted">${esc(ketRiwayat(p))}</td></tr>`;
     });
     o.body.innerHTML = html;
   }
 
   // chip filter status
-  var daftarStatus = ['Semua', 'Menunggu', 'Antrean', 'Ditolak', 'Kedaluwarsa', 'Dibatalkan'];
+  var daftarStatus = ['Semua', 'Menunggu', 'Antrean', 'Diterima', 'Ditetapkan', 'Ditolak', 'Kedaluwarsa', 'Dibatalkan'];
   var chips = [];
   daftarStatus.forEach(function (s) {
     chips.push(`<button class="chip ${s===filterAktif?'on':''}" data-f="${s}">${s}</button>`);
