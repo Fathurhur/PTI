@@ -31,13 +31,20 @@ function pengajuanMasuk() {
   });
 }
 
-// mahasiswa bimbingan = Diterima / Ditetapkan
-function daftarBimbingan() {
+// mahasiswa bimbingan = pengajuan yg diterima (langsung Ditetapkan), dipisah per peran (pembimbing 1 / 2)
+function daftarBimbingan(peran) {
   return DB.data.pengajuan.filter(function (p) {
-    return p.dosenId === ME.id && (p.status == 'Diterima' || p.status == 'Ditetapkan');
+    return p.dosenId === ME.id && p.status == 'Ditetapkan' && peranKe(p) === peran;
   }).sort(function (a, b) {
-    return a.tglKeputusan - b.tglKeputusan;
+    return a.tglSah - b.tglSah;
   });
+}
+
+// jumlah pengajuan yg lagi nunggu keputusan dosen (slotnya udah dikunci) per peran
+function jumlahMenunggu(peran) {
+  return DB.data.pengajuan.filter(function (p) {
+    return p.dosenId === ME.id && p.status == 'Menunggu' && peranKe(p) === peran;
+  }).length;
 }
 
 // sisa waktu buat dosen ngambil keputusan (batasnya 7x24 jam)
@@ -57,16 +64,15 @@ function sisaWaktu(p) {
 function drawStats() {
   // [ikon, warna, label, angka]
   var stats = [
-    ['bi-people', '', 'Kuota', ME.kuota],
-    ['bi-person-check', 'g', 'Terisi', ME.terisi],
-    ['bi-door-open', 'b', 'Sisa slot', sisa(ME)],
+    ['bi-people', '', 'Pembimbing 1 (terisi/kuota)', ME.terisi + '/' + ME.kuota],
+    ['bi-people-fill', 'g', 'Pembimbing 2 (terisi/kuota)', ME.terisi2 + '/' + ME.kuota2],
     ['bi-inbox', 'a', 'Pengajuan masuk', pengajuanMasuk().length]
   ];
 
   var html = '';
   for (var i = 0; i < stats.length; i++) {
     var s = stats[i];
-    html += `<div class="col-6 col-lg-3"><div class="card-x stat"><div class="ico ${s[1]}"><i class="bi ${s[0]}"></i></div><div><b>${s[3]}</b><span>${s[2]}</span></div></div></div>`;
+    html += `<div class="col-12 col-md-4"><div class="card-x stat"><div class="ico ${s[1]}"><i class="bi ${s[0]}"></i></div><div><b>${s[3]}</b><span>${s[2]}</span></div></div></div>`;
   }
   $('#stats').innerHTML = html;
 }
@@ -106,7 +112,7 @@ function terima(id) {
     toast(r.msg, 'danger');
     return;
   }
-  toast(r.p.mhs + ' diterima. Menunggu pengesahan koordinator.', 'success');
+  toast(r.p.mhs + ' diterima dan resmi ditetapkan.', 'success');
 }
 
 // buka modal tolak
@@ -126,41 +132,57 @@ function kirimTolak() {
   }
 
   modalTolak.hide();
-  toast('Pengajuan ' + r.p.mhs + ' ditolak. Slot dilepas dan antrean diproses.', 'dark');
+  toast('Pengajuan ' + r.p.mhs + ' ditolak. Slot dilepas.', 'dark');
 }
 
 
 // ===== BIMBINGAN =====
-// tabel mahasiswa bimbingan
-function drawBimb() {
-  var list = daftarBimbingan();
-  var html = '';
+// dua panel terpisah: bimbingan sebagai Pembimbing 1 dan sebagai Pembimbing 2
+// tiap panel punya ringkasan kuota sendiri + tabel mahasiswanya
+function panelBimbingan(peran) {
+  var terisi = peran == 2 ? ME.terisi2 : ME.terisi;
+  var kuota = kuotaPeran(ME, peran);
+  var sisaSlot = sisa(ME, peran);
+  var list = daftarBimbingan(peran);
+  var menunggu = jumlahMenunggu(peran);
+  var persen = kuota ? Math.min(100, Math.round(terisi / kuota * 100)) : 100;
 
-  for (var i = 0; i < list.length; i++) {
-    var b = list[i];
+  var warna = 'ok';
+  if (sisaSlot === 0) warna = 'full';
+  else if (persen >= 75) warna = 'warn';
+  var labelSisa = sisaSlot === 0 ? 'Kuota penuh' : 'Sisa ' + sisaSlot + ' slot';
 
-    var statusSP = '';
-    if (b.status == 'Ditetapkan') {
-      statusSP = `<span class="sbadge sb-Ditetapkan">${esc(b.sp)}</span>`;
-    } else {
-      statusSP = '<span class="sbadge sb-Menunggu">Menunggu pengesahan</span>';
-      if (b.klarifikasi) {
-        statusSP += ' <span class="sbadge sb-Ditolak mt-1"><i class="bi bi-question-circle me-1"></i>Klarifikasi diminta</span>';
-      }
-    }
-
-    html += `<tr><td><div class="d-flex align-items-center gap-2"><div class="av xs" style="background:#2457C5">${initials(b.mhs)}</div><div><b>${esc(b.mhs)}</b><div class="small text-muted">${esc(b.nim)}</div></div></div></td>
-    <td>${esc(b.judul)}</td><td class="text-nowrap">${fmtDate(b.tglKeputusan)}</td><td>${statusSP}</td></tr>`;
-  }
-
+  var baris = '';
+  list.forEach(function (b) {
+    baris += `<tr><td><div class="d-flex align-items-center gap-2"><div class="av xs" style="background:${AV_COLORS[b.id % AV_COLORS.length]}">${initials(b.mhs)}</div>
+      <div><b>${esc(b.mhs)}</b><div class="small text-muted">${esc(b.nim)}</div></div></div></td>
+      <td>${esc(b.judul)}</td>
+      <td class="text-nowrap">${fmtDate(b.tglKeputusan)}</td>
+      <td class="text-nowrap"><span class="sbadge sb-Ditetapkan">${fmtDate(b.tglSah)}</span></td></tr>`;
+  });
   if (list.length == 0) {
-    html = `<tr><td colspan="4"><div class="empty"><i class="bi bi-people"></i>Belum ada mahasiswa bimbingan.</div></td></tr>`;
+    baris = `<tr><td colspan="4"><div class="empty"><i class="bi bi-people"></i>Belum ada mahasiswa bimbingan sebagai Pembimbing ${peran}.</div></td></tr>`;
   }
-  $('#bimbBody').innerHTML = html;
 
-  // terisi = bimbingan + pengajuan yg masih nunggu keputusan (slotnya udah dikunci)
-  $('#bimbSisa').textContent = ME.terisi + '/' + ME.kuota + ' slot terisi · sisa ' + sisa(ME);
-  $('#bimbSlots').innerHTML = slotHTML(ME.kuota, ME.terisi);
+  return `<div class="card-x bb-panel mb-4">
+    <div class="bb-head">
+      <div class="bb-ico p${peran}"><i class="bi bi-${peran == 2 ? 'people-fill' : 'person-workspace'}"></i></div>
+      <div class="flex-grow-1"><h5 class="fw-bold mb-0">Dosen Pembimbing ${peran}</h5>
+        <div class="small text-muted">Mahasiswa yang Anda bimbing sebagai Pembimbing ${peran}</div></div>
+      <div class="bb-count"><b>${terisi}</b><span>/${kuota}</span><small>slot terisi</small></div>
+    </div>
+    <div class="bb-meter"><div class="slots">${slotHTML(kuota, terisi)}</div>
+      <div class="bb-facts">
+        <span class="bb-fact"><i class="bi bi-patch-check"></i>${list.length} ditetapkan</span>
+        <span class="bb-fact"><i class="bi bi-hourglass-split"></i>${menunggu} menunggu keputusan</span>
+        <span class="bb-fact ${warna}"><i class="bi bi-door-open"></i>${labelSisa}</span>
+      </div></div>
+    <div style="overflow-x:auto"><table class="table-x"><thead><tr><th>Mahasiswa</th><th>Judul</th><th>Tanggal diterima</th><th>Tanggal penetapan</th></tr></thead><tbody>${baris}</tbody></table></div>
+  </div>`;
+}
+
+function drawBimb() {
+  $('#bimbWrap').innerHTML = panelBimbingan(1) + panelBimbingan(2);
 }
 
 

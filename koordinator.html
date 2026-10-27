@@ -10,9 +10,10 @@
 <main class="page">
   <section class="view" id="rekap">
     <div class="d-flex align-items-center flex-wrap gap-2 mb-3"><h2 class="sec-title mb-0"><i class="bi bi-bar-chart"></i>Rekap beban dosen</h2>
-      <button class="btn btn-ghost ms-auto" onclick="exportCSV()"><i class="bi bi-filetype-csv me-1"></i>Ekspor CSV</button></div>
+      <div class="ms-auto d-flex gap-2 flex-wrap"><button class="btn btn-red" onclick="bukaTambahDosen()"><i class="bi bi-person-plus me-1"></i>Tambah dosen</button>
+        <button class="btn btn-ghost" onclick="exportCSV()"><i class="bi bi-filetype-csv me-1"></i>Ekspor CSV</button></div></div>
     <div class="row g-3 mb-4" id="stats"></div>
-    <div class="card-x pad"><div class="d-flex justify-content-between mb-2"><b>Pemerataan beban per dosen</b>
+    <div class="card-x pad"><div class="d-flex justify-content-between flex-wrap gap-2 mb-2"><b>Pemerataan beban per dosen</b>
       <span class="small text-muted"><span style="color:var(--green)">●</span> aman &nbsp;<span style="color:#E3A400">●</span> ≥75% &nbsp;<span style="color:var(--red)">●</span> penuh</span></div><div id="bars"></div></div>
   </section>
 
@@ -26,16 +27,19 @@
           <div class="small text-muted mb-3">Pengajuan di luar periode ditolak sistem.</div>
           <button class="btn btn-ghost w-100 mb-2" onclick="simpanPeriode()"><i class="bi bi-save me-1"></i>Simpan tanggal</button>
           <button class="btn btn-red w-100" id="btnPeriode" onclick="bukaTutupPeriode()"></button></div></div>
-      <div class="col-lg-8"><h2 class="sec-title"><i class="bi bi-sliders"></i>Kuota per dosen</h2>
-        <div class="card-x"><div style="overflow-x:auto"><table class="table-x"><thead><tr><th>Dosen</th><th>Terisi</th><th>Kuota (0–20)</th><th>Status</th></tr></thead><tbody id="kuotaBody"></tbody></table></div>
-          <div class="p-3 border-top d-flex justify-content-between align-items-center flex-wrap gap-2"><span class="small text-muted">Kuota awal 6 per dosen. Tidak boleh di bawah jumlah yang sudah terisi.</span><button class="btn btn-red" onclick="simpanKuota()">Simpan kuota</button></div></div></div>
+      <div class="col-lg-8"><div class="d-flex align-items-center flex-wrap gap-2 mb-2"><h2 class="sec-title mb-0"><i class="bi bi-sliders"></i>Kuota &amp; status dosen</h2>
+          <div class="ms-auto d-flex gap-2 flex-wrap"><button class="btn btn-ghost btn-sm" onclick="setMenerimaSemua(true)"><i class="bi bi-toggle-on me-1"></i>Terima semua</button>
+            <button class="btn btn-ghost btn-sm text-danger" onclick="setMenerimaSemua(false)"><i class="bi bi-toggle-off me-1"></i>Nonaktifkan semua</button></div></div>
+        <div class="card-x"><div style="overflow-x:auto"><table class="table-x"><thead><tr><th>Dosen</th><th>Kuota Pembimbing 1 (0–20)</th><th>Kuota Pembimbing 2 (0–20)</th><th>Menerima bimbingan</th></tr></thead><tbody id="kuotaBody"></tbody></table></div>
+          <div class="p-3 border-top d-flex justify-content-between align-items-center flex-wrap gap-2"><span class="small text-muted">Kuota awal 6 untuk Pembimbing 1 dan 6 untuk Pembimbing 2 (total 12 per dosen). Sisa kuota dihitung terpisah dan tidak boleh di bawah jumlah yang sudah terisi.</span><button class="btn btn-red" onclick="simpanKuota()">Simpan kuota</button></div></div></div>
     </div>
   </section>
 
   <section class="view" id="penetapan">
-    <h2 class="sec-title"><i class="bi bi-patch-check"></i>Pengesahan &amp; surat penetapan</h2>
-    <div class="hint-box mb-3">Setelah disahkan, sistem menerbitkan surat penetapan PDF bernomor unik berformat <b>SP-TA/&lt;periode&gt;/&lt;urut&gt;</b>.</div>
-    <div class="card-x" style="overflow-x:auto"><table class="table-x"><thead><tr><th>Mahasiswa</th><th>Pembimbing</th><th>Judul</th><th>Status</th><th></th></tr></thead><tbody id="sahBody"></tbody></table></div>
+    <div class="d-flex align-items-center flex-wrap gap-2 mb-2"><h2 class="sec-title mb-0"><i class="bi bi-patch-check"></i>Penetapan pembimbing</h2><span class="small text-muted ms-auto" id="sahCount"></span></div>
+    <div class="hint-box mb-3"><i class="bi bi-info-circle me-1"></i>Koordinator dapat langsung <b>menetapkan</b> pengajuan yang masih menunggu dosen, atau <b>memindahkan</b> Pembimbing 1 maupun Pembimbing 2 setiap mahasiswa ke dosen mana saja sesuai keputusan prodi, tanpa persetujuan dosen, walaupun kuota dosen tujuan sudah penuh.</div>
+    <div class="search mb-3"><i class="bi bi-search"></i><input class="form-control" placeholder="Cari nama, NIM, atau judul mahasiswa..." oninput="cariSah(this.value)"></div>
+    <div class="row g-3" id="sahList"></div>
   </section>
 
   <section class="view" id="impor">
@@ -45,6 +49,35 @@
       <div class="small text-muted">Kolom: nim/nidn, nama, email, peran</div><input type="file" id="fileCsv" accept=".csv" hidden></div><div id="fileInfo"></div></div>
   </section>
 </main>
+
+<div class="modal fade" id="mPindah" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title fw-bold" id="pindahJudul">Pindahkan pembimbing</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <div id="pindahInfo" class="mb-3"></div>
+    <label class="form-label fw-bold">Pilih dosen tujuan</label>
+    <div class="pick-list mb-3" id="pindahDaftar"></div>
+    <label class="form-label fw-bold">Dasar keputusan prodi</label><textarea id="pindahAlasan" class="form-control" rows="3" placeholder="Contoh: Hasil rapat prodi tanggal ... (min. 10 karakter)"></textarea>
+    <div class="small text-muted mt-2">Persetujuan dosen tidak diperlukan. Kuota dosen tujuan yang sudah penuh tetap bisa dipilih, jumlah terisinya akan melebihi kuota.</div>
+    <div class="invalid-feedback d-block" id="pindahErr"></div></div>
+  <div class="modal-footer"><button class="btn btn-ghost" data-bs-dismiss="modal">Batal</button><button class="btn btn-red" id="pindahSubmit" onclick="kirimPindah()">Pindahkan</button></div></div></div></div>
+
+<div class="modal fade" id="mTambahDosen" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
+  <div class="modal-header"><div><h5 class="modal-title fw-bold">Tambah dosen pembimbing</h5><div class="small text-muted">Dosen baru langsung muncul di daftar mahasiswa sesuai kuota yang diatur.</div></div><button class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <label class="form-label fw-bold">Nama lengkap dan gelar</label><input id="tdNama" class="form-control mb-3" maxlength="120" placeholder="Contoh: Dr. Nama Dosen, S.Kom., M.T.">
+    <label class="form-label fw-bold">NIDN</label><input id="tdNidn" class="form-control mb-3" inputmode="numeric" maxlength="10" placeholder="10 digit angka">
+    <label class="form-label fw-bold">Bidang keahlian <span class="text-muted fw-normal">(pilih minimal satu)</span></label>
+    <div class="d-flex flex-wrap gap-2 mb-3" id="tdBidang"></div>
+    <label class="form-label fw-bold">Kata kunci keahlian <span class="text-muted fw-normal">(pisahkan dengan koma, opsional)</span></label>
+    <input id="tdKata" class="form-control mb-3" placeholder="Contoh: machine learning, computer vision">
+    <div class="row g-3 mb-3">
+      <div class="col-6"><label class="form-label fw-bold">Kuota Pembimbing 1</label><input id="tdKuota1" type="number" min="0" max="20" class="form-control"></div>
+      <div class="col-6"><label class="form-label fw-bold">Kuota Pembimbing 2</label><input id="tdKuota2" type="number" min="0" max="20" class="form-control"></div>
+    </div>
+    <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="tdMenerima" checked><label class="form-check-label" for="tdMenerima">Langsung menerima bimbingan</label></div>
+    <div class="invalid-feedback d-block mt-2" id="tdErr"></div></div>
+  <div class="modal-footer"><button class="btn btn-ghost" data-bs-dismiss="modal">Batal</button><button class="btn btn-red" onclick="simpanDosenBaru()">Simpan dosen</button></div></div></div></div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="js/data.js"></script><script src="js/app.js"></script>
 <script src="js/koordinator.js"></script>

@@ -27,7 +27,7 @@
   try {
     sesi = JSON.parse(localStorage.getItem('sd_sesi'));
   } catch (e) {}
-    
+
   if (sesi && HALAMAN[sesi.role]) {
     document.getElementById('btnKembali').href = HALAMAN[sesi.role];
     document.getElementById('peranTxt').textContent = ' (' + NAMA_PERAN[sesi.role] + ')';

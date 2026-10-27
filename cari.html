@@ -13,8 +13,9 @@
   <div class="row g-4">
     <div class="col-lg-5"><div class="sticky-col">
       <div class="card-x pad mb-3">
-        <div class="d-flex justify-content-between"><b>Judul &amp; abstrak topik Anda</b><a href="#" id="contoh" class="small text-decoration-none" style="color:var(--red)">Isi contoh</a></div>
-        <input id="rJudul" class="form-control mt-3 mb-2" maxlength="200" placeholder="Judul TA">
+        <div class="d-flex justify-content-between"><b>Topik, judul &amp; abstrak Anda</b><a href="#" id="contoh" class="small text-decoration-none" style="color:var(--red)">Isi contoh</a></div>
+        <input id="rTopik" class="form-control mt-3 mb-2" maxlength="100" placeholder="Topik (contoh: Analisis sentimen)">
+        <input id="rJudul" class="form-control mb-2" maxlength="200" placeholder="Judul TA">
         <textarea id="rAbs" class="form-control" rows="8" placeholder="Abstrak (150–300 kata)"></textarea>
         <div class="mt-1 mb-3"><span class="wc" id="rWc">0 kata</span></div>
         <button class="btn btn-red w-100" id="rBtn"><i class="bi bi-calculator me-2"></i>Hitung Kecocokan</button>
@@ -49,6 +50,7 @@
 
   // form rekomendasi, tampil 5 teratas
   mountRekom({
+    topik: $('#rTopik'),
     judul: $('#rJudul'),
     abs: $('#rAbs'),
     wc: $('#rWc'),

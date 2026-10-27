@@ -1,6 +1,6 @@
 // app.js
 // isinya fungsi2 umum yg dipake di semua halaman
-// (navbar, toast, data bersama, pengajuan, antrean, modal ajukan, sesi)
+// (navbar, toast, data bersama, pengajuan, modal ajukan, sesi)
 
 // helper biar ga nulis document.querySelector terus
 function $(selector, parent) {
@@ -82,16 +82,23 @@ function initials(nama) {
   return hasil.toUpperCase();
 }
 
-// sisa slot dosen
-function sisa(d) {
-  return Math.max(0, d.kuota - d.terisi);
+// kuota dosen per peran: kuota = pembimbing 1, kuota2 = pembimbing 2
+function kuotaPeran(d, peran) {
+  return peran == 2 ? d.kuota2 : d.kuota;
+}
+
+// sisa slot dosen. peran 1 = pembimbing 1 (default), peran 2 = pembimbing 2. kuota dihitung terpisah per peran
+function sisa(d, peran) {
+  var terisi = peran == 2 ? d.terisi2 : d.terisi;
+  return Math.max(0, kuotaPeran(d, peran) - terisi);
 }
 
 function statusDosen(d) {
   if (!d.menerima) {
     return 'nonaktif';
   }
-  if (sisa(d) > 0) {
+  // tersedia kalau salah satu kuota (pembimbing 1 atau 2) masih ada
+  if (sisa(d, 1) > 0 || sisa(d, 2) > 0) {
     return 'tersedia';
   } else {
     return 'penuh';
@@ -109,7 +116,6 @@ function findDosen(id) {
   }
   return undefined;
 }
-
 
 // ================= TOAST (notif kecil di pojok kanan atas) =================
 function toast(msg, type) {
@@ -144,14 +150,12 @@ function toast(msg, type) {
   }, 3800);
 }
 
-
-
 // ================= DATA BERSAMA (DB) =================
 // semua data (pengajuan, dosen, notif, periode) disimpan di 1 key localStorage
 // jadi halaman mahasiswa, dosen, sama koordinator baca data yg sama
 // nanti di laravel ini diganti tabel2 di database
 
-var KEY_DB = 'sd_db_v3';
+var KEY_DB = 'sd_db_v7';
 var KEY_SESI = 'sd_sesi';
 
 var JAM = 60 * 60 * 1000;
@@ -159,9 +163,9 @@ var HARI = 24 * JAM;
 var BATAS_KEPUTUSAN = 7 * HARI; // dosen punya 7 x 24 jam buat mutusin (MR-05)
 
 // status yg dianggap "aktif" punya mahasiswa (MR-03)
-var STATUS_AKTIF = ['Menunggu', 'Antrean', 'Diterima', 'Ditetapkan'];
+var STATUS_AKTIF = ['Menunggu', 'Ditetapkan'];
 // status yg makan slot dosen
-var STATUS_SLOT = ['Menunggu', 'Diterima', 'Ditetapkan'];
+var STATUS_SLOT = ['Menunggu', 'Ditetapkan'];
 
 // peran halaman yg lagi dibuka, diisi di buildShell
 var ROLE_SAAT_INI = null;
@@ -196,66 +200,78 @@ var DB = {
       notif: { mhs: [], dosen: [], koor: [] },
       periode: { mulai: PERIODE.mulai, selesai: PERIODE.selesai, buka: PERIODE.buka },
       nextId: 1,
-      nextSp: 10, // nomor surat 004 & 009 udah kepake di data contoh
       rebutNext: null
     };
 
     function tambah(x) {
       var p = {
         id: data.nextId++, me: false, mhs: '', nim: '', dosenId: 0,
-        judul: '', abstrak: '', asal: 'Usulan mahasiswa', status: 'Menunggu',
+        peran: 1, topik: '', judul: '', abstrak: '', asal: 'Usulan mahasiswa', status: 'Menunggu',
         tgl: now, tglMenunggu: null, tglKeputusan: null, tglSah: null,
-        alasan: '', sp: null, dilihat: false, klarifikasi: false
+        alasan: '', dilihat: false
       };
       data.pengajuan.push(Object.assign(p, x));
     }
 
     // punya mahasiswa yg login
     tambah({ me: true, mhs: mhs.nama, nim: mhs.sub, dosenId: 5, status: 'Ditolak',
+      topik: 'Sistem rekomendasi',
       judul: 'Sistem Rekomendasi Buku Perpustakaan',
       abstrak: 'Penelitian ini membangun sistem rekomendasi buku perpustakaan kampus berdasarkan riwayat peminjaman mahasiswa.',
       tgl: now - 26 * HARI, tglMenunggu: now - 26 * HARI, tglKeputusan: now - 25 * HARI, dilihat: true,
       alasan: 'Topik kurang sesuai dengan bidang keahlian dosen (IoT, embedded system & keamanan jaringan).' });
     tambah({ me: true, mhs: mhs.nama, nim: mhs.sub, dosenId: 7, status: 'Kedaluwarsa',
+      topik: 'Sistem informasi akademik',
       judul: 'Aplikasi Peminjaman Ruang Kelas',
       abstrak: 'Rancang bangun aplikasi peminjaman ruang kelas berbasis web untuk mengurangi bentrok jadwal.',
       tgl: now - 24 * HARI, tglMenunggu: now - 24 * HARI, tglKeputusan: now - 17 * HARI, dilihat: true });
     tambah({ me: true, mhs: mhs.nama, nim: mhs.sub, dosenId: 1, status: 'Menunggu',
+      topik: 'Prediksi kebutuhan irigasi tanaman',
       judul: 'Prediksi Kebutuhan Irigasi Tanaman Berbasis Sensor IoT',
       abstrak: 'Penelitian ini membahas prediksi kebutuhan irigasi tanaman dari data sensor kelembapan tanah, suhu, dan media tanam dengan pendekatan machine learning.',
       tgl: now - 2 * HARI, tglMenunggu: now - 2 * HARI });
 
     // punya mahasiswa lain
     tambah({ mhs: 'Bagus Faaza Azhar Amin', nim: '1202230055', dosenId: 1, status: 'Menunggu', asal: 'Rekomendasi dosen',
+      topik: 'Edge AI untuk deteksi anomali sensor smart greenhouse',
       judul: 'Edge AI untuk Deteksi Anomali Sensor Smart Greenhouse',
       abstrak: 'Deteksi anomali data sensor smart greenhouse secara real-time menggunakan model ringan yang dijalankan di perangkat edge.',
       tgl: now - 150 * JAM, tglMenunggu: now - 150 * JAM });
     tambah({ mhs: 'Muhammad Alawi', nim: '1202220101', dosenId: 1, status: 'Ditetapkan',
+      topik: 'Wireless sensor network hidroponik',
       judul: 'Monitoring Kualitas Air Hidroponik Berbasis Wireless Sensor Network',
       abstrak: 'Pemantauan pH, EC, dan suhu larutan nutrisi hidroponik menggunakan jaringan sensor nirkabel.',
-      tgl: now - 26 * HARI, tglMenunggu: now - 26 * HARI, tglKeputusan: now - 24 * HARI, tglSah: now - 23 * HARI, sp: 'SP-TA/2026-1/004' });
+      tgl: now - 26 * HARI, tglMenunggu: now - 26 * HARI, tglKeputusan: now - 24 * HARI, tglSah: now - 23 * HARI });
     tambah({ mhs: 'Liobaldo', nim: '1202220145', dosenId: 1, status: 'Ditetapkan',
+      topik: 'Data fusion multisensor',
       judul: 'Data Fusion Multisensor untuk Estimasi Kelembapan Tanah',
       abstrak: 'Penggabungan data beberapa sensor untuk meningkatkan akurasi estimasi kelembapan tanah.',
-      tgl: now - 22 * HARI, tglMenunggu: now - 22 * HARI, tglKeputusan: now - 20 * HARI, tglSah: now - 18 * HARI, sp: 'SP-TA/2026-1/009' });
-    tambah({ mhs: 'Zaky Naufal', nim: '1202230078', dosenId: 4, status: 'Diterima', asal: 'Rekomendasi dosen',
+      tgl: now - 22 * HARI, tglMenunggu: now - 22 * HARI, tglKeputusan: now - 20 * HARI, tglSah: now - 18 * HARI });
+    tambah({ mhs: 'Zaky Naufal', nim: '1202230078', dosenId: 4, status: 'Ditetapkan', asal: 'Rekomendasi dosen',
+      topik: 'Student Health Risk',
       judul: 'Prediksi Student Health Risk dengan Machine Learning',
       abstrak: 'Klasifikasi risiko kesehatan mahasiswa dari data tabular menggunakan metode dari publikasi terindeks Scopus.',
-      tgl: now - 5 * HARI, tglMenunggu: now - 5 * HARI, tglKeputusan: now - 3 * HARI });
-    tambah({ mhs: 'Rayyan Nabil Abrary', nim: '1202230134', dosenId: 6, status: 'Diterima', asal: 'Rekomendasi dosen',
+      tgl: now - 5 * HARI, tglMenunggu: now - 5 * HARI, tglKeputusan: now - 3 * HARI, tglSah: now - 3 * HARI });
+    tambah({ mhs: 'Rayyan Nabil Abrary', nim: '1202230134', dosenId: 6, status: 'Ditetapkan', asal: 'Rekomendasi dosen',
+      topik: 'Image Processing / Computer Vision dengan Deep Learning',
       judul: 'Klasifikasi Penyakit Daun Tanaman dengan CNN',
       abstrak: 'Klasifikasi citra daun tanaman untuk mendeteksi penyakit menggunakan convolutional neural network.',
-      tgl: now - 4 * HARI, tglMenunggu: now - 4 * HARI, tglKeputusan: now - 2 * HARI });
+      tgl: now - 4 * HARI, tglMenunggu: now - 4 * HARI, tglKeputusan: now - 2 * HARI, tglSah: now - 2 * HARI });
 
     // data dosen. baseTerisi = terisi di data.js dikurangi pengajuan yg udah kecatat di atas
     DOSEN.forEach(function (d) {
       var tercatat = data.pengajuan.filter(function (p) {
-        return p.dosenId === d.id && STATUS_SLOT.indexOf(p.status) != -1;
+        return p.dosenId === d.id && peranKe(p) === 1 && STATUS_SLOT.indexOf(p.status) != -1;
+      }).length;
+      var tercatat2 = data.pengajuan.filter(function (p) {
+        return p.dosenId === d.id && peranKe(p) === 2 && STATUS_SLOT.indexOf(p.status) != -1;
       }).length;
 
       data.dosen[d.id] = {
         nama: d.nama,
+        nidn: d.nidn,
         kuota: d.kuota,
+        kuota2: d.kuota2,
         menerima: d.menerima,
         bidang: d.bidang.slice(),
         kata: d.kata.slice(),
@@ -263,7 +279,7 @@ var DB = {
           return { id: t.id, judul: t.judul, desk: t.desk, aktif: true };
         }),
         baseTerisi: Math.max(0, d.terisi - tercatat),
-        baseAntrean: d.antrean
+        baseTerisi2: Math.max(0, d.terisi2 - tercatat2)
       };
     });
 
@@ -278,8 +294,8 @@ var DB = {
       { ico: 'bi-inbox', t: 'Pengajuan baru dari ' + mhs.nama + ': "Prediksi Kebutuhan Irigasi Tanaman Berbasis Sensor IoT".', w: now - 2 * HARI, baca: false }
     ];
     data.notif.koor = [
-      { ico: 'bi-person-check', t: 'Dr. Farah Zakiyah Rahmanti, S.ST., M.T. menerima Rayyan Nabil Abrary. Menunggu pengesahan.', w: now - 2 * HARI, baca: false },
-      { ico: 'bi-person-check', t: 'Yohanes Setiawan, S.Si., M.Kom. menerima Zaky Naufal. Menunggu pengesahan.', w: now - 3 * HARI, baca: false }
+      { ico: 'bi-person-check', t: 'Dr. Farah Zakiyah Rahmanti, S.ST., M.T. menerima Rayyan Nabil Abrary. Pembimbing resmi ditetapkan.', w: now - 2 * HARI, baca: false },
+      { ico: 'bi-person-check', t: 'Yohanes Setiawan, S.Si., M.Kom. menerima Zaky Naufal. Pembimbing resmi ditetapkan.', w: now - 3 * HARI, baca: false }
     ];
 
     return data;
@@ -291,6 +307,10 @@ var DB = {
     lsDel('sd_pengajuan');
     lsDel('sd_riwayat');
     lsDel('sd_db_v2');
+    lsDel('sd_db_v3');
+    lsDel('sd_db_v4');
+    lsDel('sd_db_v5');
+    lsDel('sd_db_v6');
 
     this.muat();
     if (!this.data) {
@@ -345,42 +365,39 @@ var DB = {
     kirimEvent();
   },
 
-  // hitung ulang terisi, antrean, posisi, terus disalin ke array DOSEN
+  // hitung ulang terisi terus disalin ke array DOSEN
   // biar fungsi lama (sisa, statusDosen, dll) tetep jalan
   sinkron: function () {
     var data = this.data;
+
+    // dosen yg ditambah koordinator ada di data bersama tapi belum ada di array DOSEN (data.js)
+    for (var id in data.dosen) {
+      if (!findDosen(id)) {
+        var dd0 = data.dosen[id];
+        DOSEN.push({ id: Number(id), nama: dd0.nama, nidn: dd0.nidn, bidang: [], kata: [], kuota: 0, kuota2: 0, terisi: 0, terisi2: 0, menerima: true, topik: [] });
+      }
+    }
 
     DOSEN.forEach(function (d) {
       var dd = data.dosen[d.id];
       if (!dd) return;
       d.nama = dd.nama;
+      if (dd.nidn) d.nidn = dd.nidn;
       d.kuota = dd.kuota;
+      d.kuota2 = dd.kuota2;
       d.menerima = dd.menerima;
       d.bidang = dd.bidang;
       d.kata = dd.kata;
       d.topik = dd.topik;
       d.terisi = dd.baseTerisi;
-      d.antrean = dd.baseAntrean;
+      d.terisi2 = dd.baseTerisi2;
     });
 
-    // diurutin dari waktu pengajuan biar antreannya FIFO
-    var urut = data.pengajuan.slice().sort(function (a, b) {
-      return a.tgl - b.tgl;
-    });
-    var nomor = {};
-    urut.forEach(function (p) {
+    data.pengajuan.forEach(function (p) {
       var d = findDosen(p.dosenId);
-      if (!d) return;
-
-      if (STATUS_SLOT.indexOf(p.status) != -1) d.terisi++;
-
-      if (p.status == 'Antrean') {
-        d.antrean++;
-        nomor[d.id] = (nomor[d.id] || 0) + 1;
-        p.posisi = data.dosen[d.id].baseAntrean + nomor[d.id];
-      } else {
-        delete p.posisi;
-      }
+      if (!d || STATUS_SLOT.indexOf(p.status) == -1) return;
+      if (peranKe(p) === 2) d.terisi2++;
+      else d.terisi++;
     });
 
     PERIODE.mulai = data.periode.mulai;
@@ -400,7 +417,6 @@ var DB = {
 
     var self = this;
     var now = Date.now();
-    var kena = {};
     var berubah = false;
 
     this.data.pengajuan.forEach(function (p) {
@@ -409,7 +425,6 @@ var DB = {
 
       p.status = 'Kedaluwarsa';
       p.tglKeputusan = now;
-      kena[p.dosenId] = true;
       berubah = true;
 
       var d = findDosen(p.dosenId);
@@ -422,64 +437,9 @@ var DB = {
     });
 
     if (berubah) {
-      for (var id in kena) {
-        this.proses(Number(id));
-      }
       this.simpan();
     }
     return berubah;
-  },
-
-  // selama masih ada slot kosong & ada antrean, antrean paling depan naik jadi Menunggu (FIFO, MR-05)
-  // kalau dosenId ga diisi, semua dosen diproses
-  proses: function (dosenId) {
-    var self = this;
-
-    if (dosenId === undefined) {
-      DOSEN.forEach(function (d) {
-        self.proses(d.id);
-      });
-      return;
-    }
-
-    this.sinkron();
-    var d = findDosen(dosenId);
-    var dd = this.data.dosen[dosenId];
-
-    // posisi antrean mahasiswa sebelum diproses, buat notif "posisi naik"
-    var punyaku = this.data.pengajuan.find(function (p) {
-      return p.me && p.dosenId === d.id && p.status == 'Antrean';
-    });
-    var posisiAwal = punyaku ? punyaku.posisi : 0;
-
-    while (sisa(d) > 0 && d.antrean > 0) {
-      if (dd.baseAntrean > 0) {
-        // yg paling depan antrean contoh (bukan data asli), anggap aja langsung naik
-        dd.baseAntrean--;
-        dd.baseTerisi++;
-      } else {
-        var depan = this.data.pengajuan.filter(function (p) {
-          return p.dosenId === d.id && p.status == 'Antrean';
-        }).sort(function (a, b) {
-          return a.tgl - b.tgl;
-        })[0];
-
-        depan.status = 'Menunggu';
-        depan.tglMenunggu = Date.now();
-
-        if (depan.me) {
-          this.beritahu('mhs', 'bi-arrow-up-circle', 'Giliran Anda tiba! Pengajuan ke ' + d.nama + ' naik dari antrean ke Menunggu. Dosen punya 7 × 24 jam untuk memutuskan.');
-        }
-        if (d.id === ID_DOSEN_LOGIN) {
-          this.beritahu('dosen', 'bi-inbox', 'Pengajuan baru dari antrean: ' + depan.mhs + ' – "' + depan.judul + '".');
-        }
-      }
-      this.sinkron();
-    }
-
-    if (punyaku && punyaku.status == 'Antrean' && punyaku.posisi < posisiAwal) {
-      this.beritahu('mhs', 'bi-arrow-up-circle', 'Posisi antrean Anda pada ' + d.nama + ' naik menjadi #' + punyaku.posisi + '.');
-    }
   },
 
   terima: function (id) {
@@ -489,16 +449,157 @@ var DB = {
       return { ok: false, msg: 'Pengajuan ini sudah tidak menunggu keputusan.' };
     }
 
+    // dosen terima = langsung selesai, resmi ditetapkan tanpa nunggu koordinator (tanggal penetapan = tglSah)
     var d = findDosen(p.dosenId);
-    p.status = 'Diterima';
+    p.status = 'Ditetapkan';
     p.tglKeputusan = Date.now();
+    p.tglSah = p.tglKeputusan;
 
     if (p.me) {
-      this.beritahu('mhs', 'bi-check-circle', 'Selamat! ' + d.nama + ' menerima pengajuan Anda. Menunggu pengesahan koordinator.');
+      this.beritahu('mhs', 'bi-patch-check', 'Selamat! ' + d.nama + ' menerima pengajuan Anda. Pembimbing resmi ditetapkan pada ' + fmtDate(p.tglSah) + '.');
     }
-    this.beritahu('koor', 'bi-person-check', d.nama + ' menerima ' + p.mhs + '. Menunggu pengesahan.');
+    this.beritahu('koor', 'bi-person-check', d.nama + ' menerima ' + p.mhs + '. Pembimbing resmi ditetapkan.');
     this.simpan();
     return { ok: true, p: p };
+  },
+
+  // koordinator langsung nerima pengajuan yg masih Menunggu tanpa nunggu keputusan dosen (bypass, keputusan prodi)
+  // hasilnya sama kayak dosen nerima: status jadi Ditetapkan dengan tanggal penetapan hari ini
+  setujui: function (id) {
+    this.segarkan();
+    var p = this.cari(id);
+    if (!p || p.status != 'Menunggu') {
+      return { ok: false, msg: 'Pengajuan ini sudah tidak menunggu keputusan dosen.' };
+    }
+
+    var d = findDosen(p.dosenId);
+    var now = Date.now();
+    p.status = 'Ditetapkan';
+    p.tglKeputusan = now;
+    p.tglSah = now;
+    p.disetujuiKoor = true;
+
+    var ket = 'Pembimbing ' + peranKe(p);
+    if (p.me) {
+      this.beritahu('mhs', 'bi-patch-check', 'Koordinator menetapkan ' + d.nama + ' sebagai ' + ket + ' Anda sesuai keputusan prodi, tanpa menunggu keputusan dosen (tanggal penetapan ' + fmtDate(now) + ').');
+    }
+    if (d.id === ID_DOSEN_LOGIN) {
+      this.beritahu('dosen', 'bi-patch-check', p.mhs + ' ditetapkan koordinator menjadi bimbingan Anda (' + ket + ') tanpa menunggu keputusan Anda.');
+    }
+    this.simpan();
+    return { ok: true, p: p, dosen: d };
+  },
+
+  // koordinator mindahin pembimbing (1 atau 2) milik mahasiswa ke dosen mana aja sesuai keputusan prodi
+  // bypass persetujuan dosen: boleh walau masih Menunggu / udah Ditetapkan, boleh ke dosen yg kuotanya penuh
+  // atau lagi ga nerima bimbingan. yg ga boleh cuma dosen yg sama / dosen yg udah jadi pembimbing lain mahasiswa itu
+  // hasil: status jadi Ditetapkan dengan tanggal penetapan hari ini
+  pindahkan: function (id, dosenBaruId, alasan) {
+    alasan = String(alasan || '').trim();
+    if (alasan.length < 10) {
+      return { ok: false, msg: 'Dasar keputusan prodi minimal 10 karakter (sekarang ' + alasan.length + ').' };
+    }
+
+    this.segarkan();
+    var p = this.cari(id);
+    if (!p || STATUS_AKTIF.indexOf(p.status) == -1) {
+      return { ok: false, msg: 'Pembimbing ini sudah tidak aktif sehingga tidak bisa dipindahkan.' };
+    }
+
+    var baru = findDosen(dosenBaruId);
+    if (!baru) {
+      return { ok: false, msg: 'Pilih dosen tujuan terlebih dahulu.' };
+    }
+    if (baru.id === p.dosenId) {
+      return { ok: false, msg: 'Dosen tujuan sama dengan dosen sekarang.' };
+    }
+
+    // mahasiswa yg sama ga boleh dapet dosen yg sama dua kali (pembimbing 1 & 2)
+    var kembar = this.data.pengajuan.some(function (x) {
+      return x.id !== p.id && x.nim === p.nim && x.dosenId === baru.id && STATUS_AKTIF.indexOf(x.status) != -1;
+    });
+    if (kembar) {
+      return { ok: false, msg: p.mhs + ' sudah punya ' + baru.nama + ' sebagai pembimbing lain.' };
+    }
+
+    var lama = findDosen(p.dosenId);
+    var now = Date.now();
+    var melebihi = sisa(baru, peranKe(p)) === 0; // kuota dosen tujuan udah penuh, tetep diloloskan koordinator
+
+    p.riwayatPindah = (p.riwayatPindah || []).concat([{ dari: lama.id, ke: baru.id, alasan: alasan, tgl: now, statusLama: p.status, tglSahLama: p.tglSah }]);
+    p.dosenId = baru.id;
+    p.status = 'Ditetapkan';
+    p.tglKeputusan = p.tglKeputusan || now;
+    p.tglSah = now;
+
+    var ket = 'Pembimbing ' + peranKe(p);
+    if (p.me) {
+      this.beritahu('mhs', 'bi-arrow-left-right', 'Koordinator memindahkan ' + ket + ' Anda dari ' + lama.nama + ' ke ' + baru.nama + ' sesuai keputusan prodi (tanggal penetapan ' + fmtDate(p.tglSah) + ').');
+    }
+    if (lama.id === ID_DOSEN_LOGIN) {
+      this.beritahu('dosen', 'bi-arrow-left-right', p.mhs + ' dipindahkan koordinator ke ' + baru.nama + ' (keputusan prodi). Slot Anda dilepas.');
+    }
+    if (baru.id === ID_DOSEN_LOGIN) {
+      this.beritahu('dosen', 'bi-person-plus', p.mhs + ' ditetapkan koordinator menjadi bimbingan Anda (' + ket + ') sesuai keputusan prodi.');
+    }
+    this.simpan();
+    return { ok: true, p: p, lama: lama, baru: baru, melebihi: melebihi };
+  },
+
+  // koordinator langsung menetapkan Pembimbing 2 untuk mahasiswa yg belum punya (judul & abstrak ikut pembimbing 1)
+  tetapkanPembimbing2: function (nim, dosenId, alasan) {
+    alasan = String(alasan || '').trim();
+    if (alasan.length < 10) {
+      return { ok: false, msg: 'Dasar keputusan prodi minimal 10 karakter (sekarang ' + alasan.length + ').' };
+    }
+
+    this.segarkan();
+    var daftar = this.data.pengajuan.filter(function (x) {
+      return x.nim === nim && STATUS_AKTIF.indexOf(x.status) != -1;
+    });
+    var p1 = daftar.find(function (x) { return peranKe(x) === 1; });
+    var p2 = daftar.find(function (x) { return peranKe(x) === 2; });
+
+    if (!p1) {
+      return { ok: false, msg: 'Mahasiswa ini belum punya Pembimbing 1.' };
+    }
+    if (p2) {
+      return { ok: false, msg: 'Mahasiswa ini sudah punya Pembimbing 2. Gunakan tombol Pindahkan.' };
+    }
+
+    var d = findDosen(dosenId);
+    if (!d) {
+      return { ok: false, msg: 'Pilih dosen tujuan terlebih dahulu.' };
+    }
+    if (d.id === p1.dosenId) {
+      return { ok: false, msg: 'Pembimbing 2 harus dosen yang berbeda dari Pembimbing 1.' };
+    }
+
+    var now = Date.now();
+    var melebihi = sisa(d, 2) === 0;
+
+    // hasil Ditolak / Kedaluwarsa pembimbing 2 yg lama ga usah ditampilin lagi
+    this.data.pengajuan.forEach(function (x) {
+      if (x.nim === nim && peranKe(x) === 2) x.dilihat = true;
+    });
+
+    var p = {
+      id: this.data.nextId++, me: p1.me, peran: 2, mhs: p1.mhs, nim: p1.nim, dosenId: d.id,
+      topik: p1.topik, judul: p1.judul, abstrak: p1.abstrak, asal: 'Ditetapkan koordinator (keputusan prodi)', status: 'Ditetapkan',
+      tgl: now, tglMenunggu: now, tglKeputusan: now, tglSah: now,
+      alasan: '', dilihat: false,
+      riwayatPindah: [{ dari: null, ke: d.id, alasan: alasan, tgl: now, statusLama: null, tglSahLama: null }]
+    };
+    this.data.pengajuan.push(p);
+
+    if (p.me) {
+      this.beritahu('mhs', 'bi-person-plus', 'Koordinator menetapkan ' + d.nama + ' sebagai Pembimbing 2 Anda sesuai keputusan prodi (tanggal penetapan ' + fmtDate(now) + ').');
+    }
+    if (d.id === ID_DOSEN_LOGIN) {
+      this.beritahu('dosen', 'bi-person-plus', p.mhs + ' ditetapkan koordinator menjadi bimbingan Anda (Pembimbing 2) sesuai keputusan prodi.');
+    }
+    this.simpan();
+    return { ok: true, p: p, baru: d, melebihi: melebihi };
   },
 
   tolak: function (id, alasan) {
@@ -522,62 +623,92 @@ var DB = {
       this.beritahu('mhs', 'bi-x-circle', 'Pengajuan Anda ke ' + d.nama + ' ditolak. Alasan: ' + alasan);
     }
 
-    // slot dilepas, antrean maju
-    this.proses(p.dosenId);
+    // slot otomatis kosong lagi (Ditolak ga makan slot)
     this.simpan();
     return { ok: true, p: p };
   },
 
-  // koordinator ngesahin, nomor surat SP-TA/<kode periode>/<urut 3 digit>
-  sahkan: function (id) {
+  // koordinator nambah dosen baru. data = { nama, nidn, bidang: [index BIDANG], kata: [..], kuota1, kuota2, menerima }
+  tambahDosen: function (data) {
     this.segarkan();
-    var p = this.cari(id);
-    if (!p || p.status != 'Diterima') {
-      return { ok: false, msg: 'Hanya pengajuan berstatus Diterima yang bisa disahkan.' };
+
+    var nama = String(data.nama || '').trim();
+    var nidn = String(data.nidn || '').trim();
+
+    if (nama.length < 3) {
+      return { ok: false, msg: 'Nama dosen wajib diisi (minimal 3 karakter).' };
+    }
+    if (!/^\d{10}$/.test(nidn)) {
+      return { ok: false, msg: 'NIDN harus 10 digit angka.' };
+    }
+    var sudahAda = DOSEN.some(function (d) {
+      return d.nidn === nidn;
+    });
+    if (sudahAda) {
+      return { ok: false, msg: 'NIDN ' + nidn + ' sudah terdaftar.' };
+    }
+    if (!data.bidang || data.bidang.length == 0) {
+      return { ok: false, msg: 'Pilih minimal satu bidang keahlian.' };
+    }
+    var k1 = Number(data.kuota1);
+    var k2 = Number(data.kuota2);
+    if (!Number.isInteger(k1) || !Number.isInteger(k2) || k1 < 0 || k1 > 20 || k2 < 0 || k2 > 20) {
+      return { ok: false, msg: 'Kuota Pembimbing 1 dan 2 harus bilangan bulat 0–20.' };
     }
 
-    var d = findDosen(p.dosenId);
-    p.sp = 'SP-TA/' + PERIODE.kode + '/' + String(this.data.nextSp).padStart(3, '0');
-    this.data.nextSp++;
-    p.status = 'Ditetapkan';
-    p.tglSah = Date.now();
-    p.klarifikasi = false;
+    var idBaru = 0;
+    for (var id in this.data.dosen) {
+      idBaru = Math.max(idBaru, Number(id));
+    }
+    idBaru++;
 
-    if (p.me) {
-      this.beritahu('mhs', 'bi-patch-check', 'Pembimbing Anda resmi ditetapkan. Surat penetapan ' + p.sp + ' sudah bisa diunduh.');
-    }
-    if (p.dosenId === ID_DOSEN_LOGIN) {
-      this.beritahu('dosen', 'bi-patch-check', 'Penetapan ' + p.mhs + ' disahkan koordinator (' + p.sp + ').');
-    }
+    this.data.dosen[idBaru] = {
+      nama: nama,
+      nidn: nidn,
+      kuota: k1,
+      kuota2: k2,
+      menerima: !!data.menerima,
+      bidang: data.bidang.slice(),
+      kata: (data.kata || []).slice(),
+      topik: [],
+      baseTerisi: 0,
+      baseTerisi2: 0
+    };
     this.simpan();
-    return { ok: true, p: p };
+    return { ok: true, dosen: findDosen(idBaru) };
   },
 
-  klarifikasi: function (id) {
+  // koordinator ngubah status menerima / tidak menerima bimbingan. id = satu dosen, id kosong = semua dosen
+  setMenerima: function (id, menerima) {
     this.segarkan();
-    var p = this.cari(id);
-    if (!p || p.status != 'Diterima') {
-      return { ok: false, msg: 'Klarifikasi hanya untuk pengajuan berstatus Diterima.' };
+    var ubah = [];
+
+    for (var key in this.data.dosen) {
+      if (id !== null && Number(key) !== Number(id)) continue;
+      if (this.data.dosen[key].menerima === menerima) continue;
+      this.data.dosen[key].menerima = menerima;
+      ubah.push(Number(key));
     }
 
-    p.klarifikasi = true;
-    if (p.dosenId === ID_DOSEN_LOGIN) {
-      this.beritahu('dosen', 'bi-question-circle', 'Koordinator meminta klarifikasi atas penerimaan ' + p.mhs + ' ("' + p.judul + '").');
+    if (ubah.indexOf(ID_DOSEN_LOGIN) != -1) {
+      if (menerima) {
+        this.beritahu('dosen', 'bi-toggle-on', 'Koordinator mengaktifkan status Anda: sekarang menerima bimbingan.');
+      } else {
+        this.beritahu('dosen', 'bi-toggle-off', 'Koordinator menonaktifkan status Anda: sekarang tidak menerima bimbingan.');
+      }
     }
-    if (p.me) {
-      this.beritahu('mhs', 'bi-question-circle', 'Koordinator meminta klarifikasi kepada dosen atas pengajuan Anda. Pengesahan ditunda sementara.');
-    }
-    this.simpan();
-    return { ok: true, p: p };
+    if (ubah.length > 0) this.simpan();
+    return ubah.length;
   },
 
-  // peta = { idDosen: kuotaBaru }. kalau kuota naik, antrean otomatis maju
+  // peta = { idDosen: { k1: kuota pembimbing 1, k2: kuota pembimbing 2 } }
   setKuota: function (peta) {
     this.segarkan();
     for (var id in peta) {
-      if (this.data.dosen[id]) this.data.dosen[id].kuota = peta[id];
+      if (!this.data.dosen[id]) continue;
+      this.data.dosen[id].kuota = peta[id].k1;
+      this.data.dosen[id].kuota2 = peta[id].k2;
     }
-    this.proses();
     this.simpan();
   },
 
@@ -635,6 +766,21 @@ var DB = {
   }
 };
 
+// pengajuan ini buat pembimbing ke-berapa (data lama ga punya field peran, berarti 1)
+function peranKe(p) {
+  return p.peran || 1;
+}
+
+// dosen ini bisa dipilih jadi pembimbing 2: pembimbing 1 udah aktif, pembimbing 2 belum ada,
+// dosennya beda, dan masih ada slot. topik / keahlian dosen ga dipertimbangin
+function bisaPembimbing2(d) {
+  if (!DB.data) return false;
+  var p1 = State.p;
+  if (!p1 || STATUS_SLOT.indexOf(p1.status) == -1) return false;
+  if (State.aktif(2)) return false;
+  if (p1.dosenId === d.id) return false;
+  return d.menerima && sisa(d, 2) > 0;
+}
 
 // ================= STATE MAHASISWA =================
 // pembungkus DB khusus mahasiswa yg login
@@ -642,8 +788,21 @@ var DB = {
 
 var State = {
   // pengajuan aktif, atau hasil terakhir (Ditolak/Kedaluwarsa) yg belum ditutup
+  // pembimbing 1
   get p() {
-    var milikku = this.semua();
+    return this.pilih(1);
+  },
+
+  // pembimbing 2
+  get p2() {
+    return this.pilih(2);
+  },
+
+  // pengajuan aktif / hasil terakhir untuk pembimbing ke-berapa (1 atau 2)
+  pilih: function (peran) {
+    var milikku = this.semua().filter(function (x) {
+      return peranKe(x) === peran;
+    });
     for (var i = 0; i < milikku.length; i++) {
       if (STATUS_AKTIF.indexOf(milikku[i].status) != -1) return milikku[i];
     }
@@ -664,25 +823,49 @@ var State = {
     });
   },
 
-  aktif: function () {
-    var p = this.p;
+  aktif: function (peran) {
+    var p = this.pilih(peran || 1);
     return !!p && STATUS_AKTIF.indexOf(p.status) != -1;
   },
 
   // ini cuma simulasi, nanti di backend pake transaksi (SELECT ... FOR UPDATE) biar ga rebutan slot
+  // data.peran = 1 (default) atau 2. pembimbing 2 bebas pilih dosen apa aja, judul/abstrak ikut pembimbing 1
   ajukan: function (data) {
     DB.segarkan();
     DB.cek();
 
-    // 1. udah punya pengajuan aktif
-    if (this.aktif()) {
-      return { ok: false, msg: 'Anda sudah punya 1 pengajuan aktif pada periode ini.' };
+    var peran = data.peran || 1;
+
+    // 1. udah punya pengajuan aktif untuk peran ini
+    if (this.aktif(peran)) {
+      return { ok: false, msg: 'Anda sudah punya 1 pengajuan aktif untuk pembimbing ' + peran + ' pada periode ini.' };
     }
 
     // 2. di luar periode
     var per = periodeAktif();
     if (!per.ok) {
       return { ok: false, msg: per.msg };
+    }
+
+    if (peran == 2) {
+      // pembimbing 2 baru bisa dipilih kalau pembimbing 1 udah diajukan (aktif)
+      var p1 = this.p;
+      if (!p1 || STATUS_SLOT.indexOf(p1.status) == -1) {
+        return { ok: false, msg: 'Ajukan Dosen Pembimbing 1 terlebih dahulu sebelum memilih Pembimbing 2.' };
+      }
+      if (p1.dosenId === Number(data.dosenId)) {
+        return { ok: false, msg: 'Pembimbing 2 harus dosen yang berbeda dari Pembimbing 1.' };
+      }
+      data.topik = p1.topik;
+      data.judul = p1.judul;
+      data.abstrak = p1.abstrak;
+      data.asal = 'Pembimbing 2 (pilihan bebas)';
+    } else {
+      // judul / topik udah dipake mahasiswa lain
+      var kembar = cariKembar(data.topik, data.judul);
+      if (kembar.judul) {
+        return { ok: false, msg: pesanJudulKembar(kembar.judul) };
+      }
     }
 
     // 3. dosen ga nerima
@@ -694,70 +877,45 @@ var State = {
     // simulasi panel demo: slot terakhir keburu diambil mahasiswa lain
     if (DB.data.rebutNext === d.id) {
       DB.data.rebutNext = null;
-      DB.data.dosen[d.id].baseTerisi += sisa(d);
+      if (peran == 2) DB.data.dosen[d.id].baseTerisi2 += sisa(d, 2);
+      else DB.data.dosen[d.id].baseTerisi += sisa(d, 1);
       DB.simpan();
     }
 
-    // 4. slot habis pas dikirim -> tawarin antrean dulu (MR-04)
-    if (sisa(d) === 0 && !data.izinAntrean) {
-      return { ok: false, penuh: true, antrean: d.antrean };
+    // 4. kuota dosen penuh (termasuk keburu diambil mahasiswa lain) -> ditolak
+    if (sisa(d, peran) === 0) {
+      return { ok: false, msg: 'Kuota Pembimbing ' + peran + ' ' + d.nama + ' sudah penuh, pengajuan tidak bisa dikirim. Silakan pilih dosen lain yang masih punya slot.' };
     }
 
     // 5. bikin pengajuan
     DB.data.pengajuan.forEach(function (x) {
-      if (x.me) x.dilihat = true; // hasil lama ga usah ditampilin lagi
+      if (x.me && peranKe(x) === peran) x.dilihat = true; // hasil lama ga usah ditampilin lagi
     });
 
     var now = Date.now();
-    var status = sisa(d) > 0 ? 'Menunggu' : 'Antrean';
     var p = {
-      id: DB.data.nextId++, me: true, mhs: USERS.mhs.nama, nim: USERS.mhs.sub, dosenId: d.id,
-      judul: data.judul, abstrak: data.abstrak, asal: data.asal, status: status,
-      tgl: now, tglMenunggu: status == 'Menunggu' ? now : null, tglKeputusan: null, tglSah: null,
-      alasan: '', sp: null, dilihat: false, klarifikasi: false
+      id: DB.data.nextId++, me: true, peran: peran, mhs: USERS.mhs.nama, nim: USERS.mhs.sub, dosenId: d.id,
+      topik: data.topik, judul: data.judul, abstrak: data.abstrak, asal: data.asal, status: 'Menunggu',
+      tgl: now, tglMenunggu: now, tglKeputusan: null, tglSah: null,
+      alasan: '', dilihat: false
     };
     DB.data.pengajuan.push(p);
     DB.sinkron();
 
-    if (status == 'Menunggu') {
-      DB.beritahu('mhs', 'bi-check-circle', 'Pengajuan terkirim. Slot dikunci, menunggu keputusan ' + d.nama + '.');
-      if (d.id === ID_DOSEN_LOGIN) {
-        DB.beritahu('dosen', 'bi-inbox', 'Pengajuan baru dari ' + p.mhs + ': "' + p.judul + '".');
-      }
-    } else {
-      DB.beritahu('mhs', 'bi-check-circle', 'Anda masuk antrean #' + p.posisi + ' pada ' + d.nama + '. Anda dipanggil otomatis saat slot terbuka.');
+    var label = peran == 2 ? 'Pengajuan Pembimbing 2' : 'Pengajuan';
+    DB.beritahu('mhs', 'bi-check-circle', label + ' terkirim. Slot dikunci, menunggu keputusan ' + d.nama + '.');
+    if (d.id === ID_DOSEN_LOGIN) {
+      DB.beritahu('dosen', 'bi-inbox', 'Pengajuan baru' + (peran == 2 ? ' (sebagai Pembimbing 2)' : '') + ' dari ' + p.mhs + ': "' + p.judul + '".');
     }
 
     DB.simpan();
-    return { ok: true, status: status, posisi: p.posisi };
-  },
-
-  // cuma boleh kalau masih Menunggu / Antrean
-  batalkan: function () {
-    DB.segarkan();
-    var p = this.p;
-    if (!p || (p.status != 'Menunggu' && p.status != 'Antrean')) return false;
-
-    var d = findDosen(p.dosenId);
-    var tadinya = p.status;
-    p.status = 'Dibatalkan';
-    p.tglKeputusan = Date.now();
-    p.dilihat = true;
-
-    DB.beritahu('mhs', 'bi-slash-circle', 'Pengajuan ke ' + d.nama + ' dibatalkan.');
-    if (tadinya == 'Menunggu' && d.id === ID_DOSEN_LOGIN) {
-      DB.beritahu('dosen', 'bi-slash-circle', p.mhs + ' membatalkan pengajuan "' + p.judul + '".');
-    }
-
-    DB.proses(d.id);
-    DB.simpan();
-    return true;
+    return { ok: true, status: p.status };
   },
 
   // hasil Ditolak / Kedaluwarsa ditutup biar bisa pilih dosen lain
-  tutupHasil: function () {
+  tutupHasil: function (peran) {
     DB.segarkan();
-    var p = this.p;
+    var p = this.pilih(peran || 1);
     if (p && (p.status == 'Ditolak' || p.status == 'Kedaluwarsa')) {
       p.dilihat = true;
       DB.simpan();
@@ -776,8 +934,7 @@ var State = {
     }
 
     dd.baseTerisi--;
-    toast('Slot ' + d.nama + ' dilepas. Antrean FIFO diproses otomatis.', 'dark');
-    DB.proses(dosenId);
+    toast('Slot ' + d.nama + ' dilepas, sekarang bisa diajukan lagi.', 'dark');
     DB.simpan();
   },
 
@@ -795,7 +952,6 @@ var State = {
   }
 };
 
-
 // ================= LIVE UPDATE =================
 // harusnya polling ke server tiap 5 detik (MR-01)
 // sementara angka contohnya diubah random aja buat demo
@@ -808,14 +964,14 @@ var Live = {
     DB.segarkan();
     DB.cek();
 
-    // yg diacak cuma dosen yg nerima, ga ada antrean, dan belum ada pengajuan kecatat
+    // yg diacak cuma dosen yg nerima dan belum ada pengajuan kecatat
     // biar angka di demo ga berantakan
     var pool = [];
     DOSEN.forEach(function (d) {
       var tercatat = DB.data.pengajuan.some(function (p) {
         return p.dosenId === d.id;
       });
-      if (d.menerima && d.antrean === 0 && !tercatat && DB.data.rebutNext !== d.id) {
+      if (d.menerima && !tercatat && DB.data.rebutNext !== d.id) {
         pool.push(d);
       }
     });
@@ -869,9 +1025,6 @@ var Live = {
   }
 };
 
-
-
-
 // ================= TF-IDF + COSINE SIMILARITY (MR-06) =================
 // ini versi js buat demo, nanti di backend laravel rumusnya sama
 
@@ -889,7 +1042,72 @@ function tokenize(teks) {
   return hasil;
 }
 
-function recommend(judul, abstrak) {
+// ================= CEK KESAMAAN JUDUL / TOPIK =================
+// pembanding: (1) pengajuan mahasiswa lain yg udah di-ACC dosen pembimbing 1 (Ditetapkan)
+// dan (2) arsip judul & topik mahasiswa yg udah lulus (ARSIP di data.js)
+// kemiripan = jaccard antar kata (udah tanpa stopword)
+// judul >= batas -> DIBLOKIR (udah dipake), topik >= batas -> cuma PERINGATAN, tetep boleh diajukan
+var BATAS_MIRIP = 0.6;
+var STATUS_ACC = ['Ditetapkan'];
+
+function jaccard(a, b) {
+  var himA = new Set(tokenize(a));
+  var himB = new Set(tokenize(b));
+  if (himA.size == 0 || himB.size == 0) return 0;
+
+  var irisan = 0;
+  himA.forEach(function (w) {
+    if (himB.has(w)) irisan++;
+  });
+  return irisan / (himA.size + himB.size - irisan);
+}
+
+// semua judul & topik yg udah "terpakai": pengajuan di-ACC mahasiswa lain + arsip lulusan
+function daftarTerpakai() {
+  var hasil = [];
+
+  if (DB.data) {
+    DB.data.pengajuan.forEach(function (p) {
+      if (p.me || peranKe(p) !== 1 || STATUS_ACC.indexOf(p.status) == -1) return;
+      hasil.push({ judul: p.judul, topik: p.topik, ket: 'pengajuan mahasiswa lain berstatus ' + p.status });
+    });
+  }
+
+  ARSIP.forEach(function (a) {
+    hasil.push({ judul: a.judul, topik: a.topik, ket: 'arsip TA lulusan ' + a.tahun });
+  });
+  return hasil;
+}
+
+// balikin { judul: cocok / null, topik: cocok / null }, cocok = { teks, ket, skor } yg paling mirip
+function cariKembar(topik, judul) {
+  topik = String(topik || '').trim();
+  judul = String(judul || '').trim();
+
+  var hasil = { judul: null, topik: null };
+  daftarTerpakai().forEach(function (x) {
+    var sJudul = judul && x.judul ? jaccard(judul, x.judul) : 0;
+    if (sJudul >= BATAS_MIRIP && (!hasil.judul || sJudul > hasil.judul.skor)) {
+      hasil.judul = { teks: x.judul, ket: x.ket, skor: sJudul };
+    }
+
+    var sTopik = topik && x.topik ? jaccard(topik, x.topik) : 0;
+    if (sTopik >= BATAS_MIRIP && (!hasil.topik || sTopik > hasil.topik.skor)) {
+      hasil.topik = { teks: x.topik, ket: x.ket, skor: sTopik };
+    }
+  });
+  return hasil;
+}
+
+function pesanJudulKembar(m) {
+  return 'Judul ini sudah digunakan (' + m.ket + ': "' + m.teks + '", kemiripan ' + Math.round(m.skor * 100) + '%) sehingga tidak bisa diajukan. Ganti judul Anda.';
+}
+
+function pesanTopikMirip(m) {
+  return 'Peringatan: topik Anda mirip ' + Math.round(m.skor * 100) + '% dengan topik yang sudah ada (' + m.ket + ': "' + m.teks + '"). Tetap boleh diajukan, pastikan judul dan fokus penelitian Anda berbeda.';
+}
+
+function recommend(topik, judul, abstrak) {
   // 1. bikin "dokumen" utk tiap dosen dari kata kunci, topik, sama bidangnya
   var docs = [];
   for (var i = 0; i < DOSEN.length; i++) {
@@ -908,8 +1126,8 @@ function recommend(judul, abstrak) {
     docs.push({ d: d, tokens: tokenize(gabungan) });
   }
 
-  // 2. query dari judul + abstrak, judulnya juga dikali 2
-  var q = tokenize(judul + ' ' + judul + ' ' + abstrak);
+  // 2. query dari topik + judul + abstrak, topik & judul dikali 2
+  var q = tokenize(topik + ' ' + topik + ' ' + judul + ' ' + judul + ' ' + abstrak);
 
   // 3. hitung df (berapa dokumen yg punya kata itu)
   var N = docs.length;
@@ -959,12 +1177,11 @@ function recommend(judul, abstrak) {
       hasil.push({ d: doc.d, skor: skor });
     }
   });
-  // console.log(hasil);
 
   // sesuai SRS: dosen yg masih ada slot ditaruh di atas, baru diurutkan skornya. max 5
   hasil.sort(function (a, b) {
-    var adaSlotA = sisa(a.d) > 0 ? 1 : 0;
-    var adaSlotB = sisa(b.d) > 0 ? 1 : 0;
+    var adaSlotA = sisa(a.d, 1) > 0 ? 1 : 0;
+    var adaSlotB = sisa(b.d, 1) > 0 ? 1 : 0;
     if (adaSlotA != adaSlotB) return adaSlotB - adaSlotA;
     return b.skor - a.skor;
   });
@@ -984,13 +1201,12 @@ function rekomHTML(list, max) {
   var data = list.slice(0, max);
   for (var i = 0; i < data.length; i++) {
     var r = data[i];
-    var st = statusDosen(r.d);
 
     var infoSlot = '';
-    if (st == 'tersedia') {
-      infoSlot = `<span style="color:var(--green);font-weight:700">Sisa ${sisa(r.d)} slot</span>`;
+    if (sisa(r.d, 1) > 0) {
+      infoSlot = `<span style="color:var(--green);font-weight:700">Sisa ${sisa(r.d, 1)} slot Pembimbing 1</span>`;
     } else {
-      infoSlot = '<span style="color:var(--red-dark);font-weight:700">Penuh – masuk antrean</span>';
+      infoSlot = '<span style="color:var(--red-dark);font-weight:700">Kuota Pembimbing 1 penuh</span>';
     }
 
     html += `<div class="rek-item">
@@ -1015,7 +1231,6 @@ function animateScores(root) {
     });
   });
 }
-
 
 // ================= NAVBAR + PANEL DEMO =================
 // format: [link, label, key]
@@ -1181,7 +1396,6 @@ function renderNotif() {
   $('#notifDot').hidden = !adaBaru;
 }
 
-
 // buat halaman yg pake tab (dosen & koordinator)
 // section yg tampil sesuai #hash di url
 function initViews(defaultKey) {
@@ -1203,8 +1417,6 @@ function initViews(defaultKey) {
   tampilkan();
 }
 
-
-
 // ================= MODAL AJUKAN + DETAIL DOSEN =================
 // dipake di halaman2 mahasiswa
 function injectAjukanUI() {
@@ -1214,15 +1426,20 @@ function injectAjukanUI() {
     <div class="modal-header"><div><h5 class="modal-title fw-bold" id="mjTitle">Ajukan Pembimbing</h5><div class="small text-muted" id="mjSub"></div></div><button class="btn-close" data-bs-dismiss="modal"></button></div>
     <div class="modal-body">
       <div id="mjInfo" class="mb-3"></div>
+      <div id="mjFormTA">
       <div class="mb-3"><label class="form-label fw-bold">Asal topik</label>
         <div class="d-flex gap-2 flex-wrap">
           <label class="chip" id="lblSendiri"><input type="radio" name="asal" value="sendiri" class="d-none" checked><i class="bi bi-lightbulb"></i> Usulan saya sendiri</label>
           <label class="chip" id="lblRek"><input type="radio" name="asal" value="rekom" class="d-none"><i class="bi bi-bookmark-star"></i> Topik rekomendasi dosen</label></div>
         <select id="mjTopik" class="form-select mt-2 d-none"></select></div>
+      <div class="mb-3"><label class="form-label fw-bold">Topik</label>
+        <input id="mjTopikTeks" class="form-control" maxlength="100" placeholder="Contoh: Klasifikasi citra medis"></div>
       <div class="mb-3"><div class="d-flex justify-content-between"><label class="form-label fw-bold">Judul TA</label><span class="wc" id="mjJudulWc">0/200</span></div>
         <input id="mjJudul" class="form-control" maxlength="200" placeholder="Tulis judul tugas akhir"></div>
       <div class="mb-1"><div class="d-flex justify-content-between"><label class="form-label fw-bold">Abstrak</label><span class="wc" id="mjAbsWc">0 kata (wajib 150–300)</span></div>
         <textarea id="mjAbs" rows="7" class="form-control" placeholder="Tulis abstrak 150–300 kata"></textarea></div>
+      </div>
+      <div class="warn-box mb-2" id="mjWarn" hidden></div>
       <div class="invalid-feedback d-block" id="mjErr"></div>
     </div>
     <div class="modal-footer"><button class="btn btn-ghost" data-bs-dismiss="modal">Batal</button><button class="btn btn-red" id="mjSubmit">Kirim Pengajuan</button></div>
@@ -1236,9 +1453,7 @@ function injectAjukanUI() {
   var modal = new bootstrap.Modal('#mAjukan');
   var offcanvas = new bootstrap.Offcanvas('#ocDetail');
   var dosenDipilih = null;
-
-  // true kalau mahasiswa udah setuju masuk antrean (MR-04)
-  var izinAntrean = false;
+  var pembimbingKe = 1; // 1 atau 2, diisi waktu modal dibuka
 
   function pakaiRekom() {
     return $('input[name=asal]:checked').value == 'rekom';
@@ -1269,8 +1484,23 @@ function injectAjukanUI() {
     });
     if (t) {
       $('#mjJudul').value = t.judul;
+      $('#mjTopikTeks').value = t.judul;
       updateJudulWc();
+      cekKembarForm();
     }
+  }
+
+  // cek langsung pas ngetik: kalau judul/topik udah dipake mahasiswa lain, tombol kirim dimatiin
+  function cekKembarForm() {
+    DB.segarkan();
+    var k = cariKembar($('#mjTopikTeks').value, $('#mjJudul').value);
+    $('#mjErr').textContent = k.judul ? pesanJudulKembar(k.judul) : '';
+    $('#mjSubmit').disabled = !!k.judul;
+
+    // topik mirip cuma peringatan, tombol kirim tetap aktif
+    var warn = $('#mjWarn');
+    warn.hidden = !k.topik;
+    if (k.topik) warn.textContent = pesanTopikMirip(k.topik);
   }
 
   function syncAsal() {
@@ -1285,7 +1515,11 @@ function injectAjukanUI() {
     r.addEventListener('change', syncAsal);
   });
   $('#mjTopik').addEventListener('change', isiTopik);
-  $('#mjJudul').addEventListener('input', updateJudulWc);
+  $('#mjJudul').addEventListener('input', function () {
+    updateJudulWc();
+    cekKembarForm();
+  });
+  $('#mjTopikTeks').addEventListener('input', cekKembarForm);
   $('#mjAbs').addEventListener('input', updateAbsWc);
 
   // buka modal ajukan
@@ -1300,15 +1534,30 @@ function injectAjukanUI() {
       return;
     }
 
-    if (State.aktif()) {
-      var p = State.p;
+    var peran = opt.peran || 1;
+    pembimbingKe = peran;
+
+    if (State.aktif(peran)) {
+      var p = State.pilih(peran);
       var namaDosen = findDosen(p.dosenId).nama;
-      if (p.status == 'Menunggu' || p.status == 'Antrean') {
-        toast('Anda sudah punya 1 pengajuan aktif (' + p.status + ' ke ' + namaDosen + '). Batalkan dulu di halaman Pengajuan Saya.', 'warning');
+      if (p.status == 'Menunggu') {
+        toast('Anda sudah punya 1 pengajuan aktif untuk pembimbing ' + peran + ' (' + p.status + ' ke ' + namaDosen + '). Tunggu keputusan dosen (maks. 7 × 24 jam) sebelum mengajukan lagi.', 'warning');
       } else {
-        toast('Pengajuan Anda sudah ' + p.status.toLowerCase() + ' oleh ' + namaDosen + '. Tidak bisa mengajukan lagi pada periode ini.', 'warning');
+        toast('Pembimbing ' + peran + ' Anda sudah ' + p.status.toLowerCase() + ' oleh ' + namaDosen + '. Tidak bisa mengajukan lagi pada periode ini.', 'warning');
       }
       return;
+    }
+
+    if (peran == 2) {
+      var p1 = State.p;
+      if (!p1 || STATUS_SLOT.indexOf(p1.status) == -1) {
+        toast('Ajukan Dosen Pembimbing 1 terlebih dahulu sebelum memilih Pembimbing 2.', 'warning');
+        return;
+      }
+      if (p1.dosenId === d.id) {
+        toast('Pembimbing 2 harus dosen yang berbeda dari Pembimbing 1.', 'warning');
+        return;
+      }
     }
 
     if (!d.menerima) {
@@ -1316,23 +1565,24 @@ function injectAjukanUI() {
       return;
     }
 
-    dosenDipilih = d;
-    var antre = sisa(d) === 0; // kalo penuh berarti masuk antrean
-    izinAntrean = antre; // dari awal udah milih antrean, jadi ga perlu ditawarin lagi
+    // kuota penuh = ga bisa diajukan sama sekali
+    if (sisa(d, peran) === 0) {
+      toast('Kuota Pembimbing ' + peran + ' ' + d.nama + ' sudah penuh, tidak bisa mengajukan. Pilih dosen lain yang masih punya slot.', 'warning');
+      return;
+    }
 
-    if (antre) {
-      $('#mjTitle').textContent = 'Masuk Antrean (FIFO)';
-      $('#mjSub').textContent = d.nama + ' · antrean saat ini ' + d.antrean + ' orang';
-      $('#mjSubmit').textContent = 'Masuk Antrean';
-      $('#mjSubmit').className = 'btn btn-amber';
-      $('#mjInfo').innerHTML = `<div class="warn-box"><i class="bi bi-people me-1"></i>Slot dosen ini penuh. Anda akan masuk antrean urutan <b>#${d.antrean+1}</b> dan otomatis dipanggil saat slot terbuka.</div>`;
+    dosenDipilih = d;
+    $('#mjTitle').textContent = peran == 2 ? 'Ajukan Pembimbing 2' : 'Ajukan Pembimbing';
+    $('#mjSub').textContent = d.nama + ' · sisa ' + sisa(d, peran) + ' slot Pembimbing ' + peran;
+    $('#mjSubmit').textContent = 'Kirim Pengajuan';
+    $('#mjSubmit').className = 'btn btn-red';
+    if (peran == 2) {
+      // pembimbing 2 bebas, ga perlu cocok topik / keahlian. judul & abstrak ikut pembimbing 1
+      $('#mjInfo').innerHTML = `<div class="hint-box"><i class="bi bi-people me-1"></i>Pembimbing 2 bebas dipilih tanpa harus sesuai topik atau keahlian dosen. Judul dan abstrak mengikuti pengajuan Pembimbing 1 Anda. Slot dikunci saat pengajuan dikirim dan dosen punya 7 × 24 jam untuk memutuskan.</div>`;
     } else {
-      $('#mjTitle').textContent = 'Ajukan Pembimbing';
-      $('#mjSub').textContent = d.nama + ' · sisa ' + sisa(d) + ' slot';
-      $('#mjSubmit').textContent = 'Kirim Pengajuan';
-      $('#mjSubmit').className = 'btn btn-red';
       $('#mjInfo').innerHTML = `<div class="hint-box"><i class="bi bi-shield-check me-1"></i>Slot akan dikunci untuk Anda saat pengajuan dikirim. Dosen punya 7 × 24 jam untuk memutuskan.</div>`;
     }
+    $('#mjFormTA').hidden = peran == 2;
 
     // topik yg dinonaktifkan dosen ga ditampilin
     var daftarTopik = topikAktif(d);
@@ -1345,8 +1595,11 @@ function injectAjukanUI() {
 
     // reset form
     $('#mjJudul').value = '';
+    $('#mjTopikTeks').value = '';
     $('#mjAbs').value = '';
     $('#mjErr').textContent = '';
+    $('#mjWarn').hidden = true;
+    $('#mjSubmit').disabled = false;
     updateJudulWc();
     updateAbsWc();
     $('input[name=asal][value=sendiri]').checked = true;
@@ -1365,12 +1618,29 @@ function injectAjukanUI() {
 
   // tombol kirim pengajuan
   $('#mjSubmit').onclick = function () {
+    var err = $('#mjErr');
+
+    // pembimbing 2: cukup dosennya, sisanya diisi otomatis di State.ajukan
+    if (pembimbingKe == 2) {
+      var r2 = State.ajukan({ dosenId: dosenDipilih.id, peran: 2 });
+      if (!r2.ok) {
+        err.textContent = r2.msg;
+        return;
+      }
+      modal.hide();
+      return;
+    }
+
+    var topik = $('#mjTopikTeks').value.trim();
     var judul = $('#mjJudul').value.trim();
     var abs = $('#mjAbs').value;
     var n = wordCount(abs);
-    var err = $('#mjErr');
 
     // validasi
+    if (!topik) {
+      err.textContent = 'Topik wajib diisi.';
+      return;
+    }
     if (!judul) {
       err.textContent = 'Judul wajib diisi.';
       return;
@@ -1381,21 +1651,7 @@ function injectAjukanUI() {
     }
 
     var asal = pakaiRekom() ? 'Rekomendasi dosen' : 'Usulan mahasiswa';
-    var r = State.ajukan({ dosenId: dosenDipilih.id, judul: judul, abstrak: abs, asal: asal, izinAntrean: izinAntrean });
-
-    // slot keburu diambil orang lain pas dikirim -> tawarin antrean (MR-04)
-    if (!r.ok && r.penuh) {
-      izinAntrean = true;
-      $('#mjTitle').textContent = 'Slot Baru Saja Penuh';
-      $('#mjSub').textContent = dosenDipilih.nama + ' · antrean saat ini ' + r.antrean + ' orang';
-      $('#mjSubmit').textContent = 'Masuk Antrean';
-      $('#mjSubmit').className = 'btn btn-amber';
-      $('#mjInfo').innerHTML = `<div class="warn-box"><i class="bi bi-exclamation-triangle me-1"></i>Slot terakhir <b>${esc(dosenDipilih.nama)}</b> baru saja diambil mahasiswa lain sesaat sebelum pengajuan Anda masuk.
-        Klik <b>Masuk Antrean</b> sekali lagi untuk masuk antrean urutan <b>#${r.antrean+1}</b>, atau tutup jendela ini untuk memilih dosen lain.</div>`;
-      err.textContent = '';
-      $('#mjInfo').scrollIntoView({ block: 'nearest' });
-      return;
-    }
+    var r = State.ajukan({ dosenId: dosenDipilih.id, topik: topik, judul: judul, abstrak: abs, asal: asal });
 
     if (!r.ok) {
       err.textContent = r.msg;
@@ -1415,8 +1671,6 @@ function injectAjukanUI() {
     if (st == 'tersedia') labelStatus = 'Tersedia';
     else if (st == 'penuh') labelStatus = 'Penuh';
 
-    var antreanTxt = d.antrean ? ` · antrean ${d.antrean} orang` : '';
-
     var bidangHTML = d.bidang.map(function (i) {
       return `<span class="tag">${BIDANG[i]}</span>`;
     }).join('');
@@ -1425,7 +1679,8 @@ function injectAjukanUI() {
       return `<span class="tag">${esc(k)}</span>`;
     }).join('');
 
-    var disabled = st == 'nonaktif' ? 'disabled' : '';
+    var bisaP1 = d.menerima && sisa(d, 1) > 0;
+    var disabled = bisaP1 ? '' : 'disabled';
     var topikHTML = topikAktif(d).map(function (t) {
       return `<div class="card-x pad mb-2"><b>${esc(t.judul)}</b><div class="small text-muted my-1">${esc(t.desk)}</div>
         <button class="btn btn-ghost btn-sm" ${disabled} onclick="openAjukan(${d.id},{topikId:'${t.id}'})">Pilih topik ini</button></div>`;
@@ -1435,10 +1690,10 @@ function injectAjukanUI() {
     }
 
     var tombol = '';
-    if (st == 'nonaktif') {
+    if (!d.menerima) {
       tombol = '<button class="btn btn-ghost" disabled>Dosen tidak menerima bimbingan</button>';
-    } else if (st == 'penuh') {
-      tombol = `<button class="btn btn-amber" onclick="openAjukan(${d.id})">Masuk Antrean (FIFO)</button>`;
+    } else if (!bisaP1) {
+      tombol = '<button class="btn btn-ghost" disabled>Kuota Pembimbing 1 penuh</button>';
     } else {
       tombol = `<button class="btn btn-red" onclick="openAjukan(${d.id})">Ajukan dengan topik sendiri</button>`;
     }
@@ -1446,14 +1701,17 @@ function injectAjukanUI() {
     $('#ocBody').innerHTML = `
       <div class="d-flex gap-3 align-items-center mb-3">${avatar(d,'lg')}<div><h5 class="fw-bold mb-1">${esc(d.nama)}</h5><div class="text-muted small">NIDN ${d.nidn}</div>
         <span class="badge-s ${st} mt-2 d-inline-block">${labelStatus}</span></div></div>
-      <div class="card-x pad mb-3"><div class="d-flex justify-content-between"><b>Kuota bimbingan</b><span>${d.terisi}/${d.kuota}</span></div>
+      <div class="card-x pad mb-3"><div class="d-flex justify-content-between"><b>Kuota Pembimbing 1</b><span>${d.terisi}/${d.kuota}</span></div>
         <div class="slots">${slotHTML(d.kuota, d.terisi)}</div>
-        <div class="small text-muted">Sisa ${sisa(d)} slot${antreanTxt}</div></div>
+        <div class="small text-muted mb-3">Sisa ${sisa(d, 1)} slot</div>
+        <div class="d-flex justify-content-between"><b>Kuota Pembimbing 2</b><span>${d.terisi2}/${d.kuota2}</span></div>
+        <div class="slots">${slotHTML(d.kuota2, d.terisi2)}</div>
+        <div class="small text-muted">Sisa ${sisa(d, 2)} slot</div></div>
       <div class="filter-label mt-0">Bidang keahlian</div>${bidangHTML}
       <div class="filter-label">Kata kunci</div>${kataHTML}
       <div class="filter-label">Topik yang ditawarkan</div>
       ${topikHTML}
-      <div class="d-grid mt-3">${tombol}</div>`;
+      <div class="d-grid gap-2 mt-3">${tombol}${bisaPembimbing2(d) ? `<button class="btn btn-outline-dark" onclick="openAjukan(${d.id},{peran:2})">Pilih sebagai Pembimbing 2</button>` : ''}</div>`;
 
     offcanvas.show();
   };
@@ -1468,7 +1726,6 @@ function injectAjukanUI() {
   });
 }
 
-
 // kotak2 kecil indikator slot
 function slotHTML(kuota, terisi) {
   var html = '';
@@ -1478,7 +1735,6 @@ function slotHTML(kuota, terisi) {
   return html;
 }
 
-
 // ================= KARTU DOSEN (dashboard & cari) =================
 function dosenCardHTML(d) {
   var st = statusDosen(d);
@@ -1486,25 +1742,26 @@ function dosenCardHTML(d) {
 
   var badge = '';
   var tombol = '';
-  if (st == 'tersedia') {
-    badge = 'TERSEDIA';
-    tombol = `<button class="btn btn-red" onclick="openAjukan(${d.id})"><i class="bi bi-send me-1"></i>Ajukan</button>`;
-  } else if (st == 'penuh') {
-    badge = 'PENUH';
-    tombol = `<button class="btn btn-amber" onclick="openAjukan(${d.id})"><i class="bi bi-people me-1"></i>Masuk Antrean (FIFO)</button>`;
-  } else {
+  if (st == 'nonaktif') {
     badge = 'TIDAK MENERIMA';
     tombol = `<button class="btn btn-ghost" disabled>Tidak menerima</button>`;
+  } else {
+    badge = st == 'tersedia' ? 'TERSEDIA' : 'PENUH';
+    if (sisa(d, 1) > 0) {
+      tombol = `<button class="btn btn-red" onclick="openAjukan(${d.id})"><i class="bi bi-send me-1"></i>Ajukan Pembimbing 1</button>`;
+    } else {
+      tombol = `<button class="btn btn-ghost" disabled>Kuota Pembimbing 1 penuh</button>`;
+    }
+  }
+
+  // pembimbing 2 bebas pilih dosen mana aja yg masih ada slot
+  if (bisaPembimbing2(d)) {
+    tombol += `<button class="btn btn-outline-dark" onclick="openAjukan(${d.id},{peran:2})"><i class="bi bi-person-plus me-1"></i>Pilih sbg Pembimbing 2</button>`;
   }
 
   var bidangHTML = '';
   for (var i = 0; i < d.bidang.length; i++) {
     bidangHTML += `<span class="tag">${BIDANG[d.bidang[i]]}</span>`;
-  }
-
-  var antreanTxt = '';
-  if (d.antrean) {
-    antreanTxt = ` · <span style="color:var(--amber);font-weight:700">Antrean ${d.antrean}</span>`;
   }
 
   return `<div class="card-x dosen-card ${st=='tersedia'?'ok':''} ${flash}" data-id="${d.id}">
@@ -1513,11 +1770,12 @@ function dosenCardHTML(d) {
       <div class="d-flex justify-content-between align-items-start gap-2"><div><h4>${esc(d.nama)}</h4><div class="nidn">NIDN ${d.nidn}</div></div><span class="badge-s ${st}">${badge}</span></div>
       <div class="mt-2">${bidangHTML}</div>
       <div class="slots">${slotHTML(d.kuota, d.terisi)}</div>
-      <div class="slot-text">Terisi <b>${d.terisi}</b> · Sisa <b>${sisa(d)}</b> / Kuota <b>${d.kuota}</b>${antreanTxt}</div>
+      <div class="slot-text"><b>Pembimbing 1</b> · Terisi <b>${d.terisi}</b> · Sisa <b>${sisa(d, 1)}</b> / Kuota <b>${d.kuota}</b></div>
+      <div class="slots">${slotHTML(d.kuota2, d.terisi2)}</div>
+      <div class="slot-text"><b>Pembimbing 2</b> · Terisi <b>${d.terisi2}</b> · Sisa <b>${sisa(d, 2)}</b> / Kuota <b>${d.kuota2}</b></div>
       <div class="d-flex gap-2 flex-wrap mt-3">${tombol}<button class="btn btn-ghost" data-detail="${d.id}"><i class="bi bi-person-lines-fill me-1"></i>Profil &amp; Topik</button></div>
     </div></div>`;
 }
-
 
 // ================= PERIODE, TOPIK, WAKTU =================
 
@@ -1582,63 +1840,6 @@ function topikAktif(d) {
     return t.aktif !== false;
   });
 }
-
-
-// ================= SURAT PENETAPAN =================
-// dibuka di tab baru, terus mahasiswa/koordinator bisa cetak atau simpan jadi PDF
-function bukaSurat(p) {
-  if (!p || p.status != 'Ditetapkan') {
-    toast('Surat penetapan belum tersedia.', 'warning');
-    return;
-  }
-
-  var d = findDosen(p.dosenId);
-  var w = window.open('', '_blank');
-  if (!w) {
-    toast('Pop-up diblokir browser. Izinkan pop-up untuk membuka surat.', 'warning');
-    return;
-  }
-
-  var html = `<!doctype html><html lang="id"><head><meta charset="utf-8"><title>Surat Penetapan ${esc(p.sp)}</title>
-  <style>
-    body { font-family: 'Times New Roman', serif; color: #111; background: #f3f4f6; margin: 0; padding: 24px; }
-    .kertas { background: #fff; max-width: 720px; margin: 0 auto; padding: 48px 56px; box-shadow: 0 2px 12px rgba(0,0,0,.12); }
-    .kop { text-align: center; border-bottom: 3px double #111; padding-bottom: 10px; margin-bottom: 24px; }
-    .kop b { display: block; font-size: 18px; letter-spacing: .04em; }
-    h1 { font-size: 17px; text-align: center; text-decoration: underline; margin: 0; }
-    .no { text-align: center; margin: 4px 0 24px; }
-    table { border-collapse: collapse; margin: 14px 0 18px; width: 100%; }
-    td { padding: 5px 4px; vertical-align: top; }
-    td:first-child { width: 170px; }
-    .ttd { margin-top: 48px; margin-left: auto; width: 260px; }
-    .ttd .nama { margin-top: 70px; font-weight: bold; text-decoration: underline; }
-    .aksi { text-align: center; margin-bottom: 18px; }
-    .aksi button { font: 600 14px sans-serif; padding: 10px 18px; border: 0; border-radius: 8px; background: #D9132B; color: #fff; cursor: pointer; }
-    @media print { body { background: #fff; padding: 0; } .kertas { box-shadow: none; padding: 0; } .aksi { display: none; } }
-  </style></head><body>
-  <div class="aksi"><button onclick="window.print()">Cetak / Simpan sebagai PDF</button></div>
-  <div class="kertas">
-    <div class="kop"><b>PROGRAM STUDI S1 TEKNOLOGI INFORMASI</b>Kampus Surabaya</div>
-    <h1>SURAT PENETAPAN DOSEN PEMBIMBING TUGAS AKHIR</h1>
-    <div class="no">Nomor: ${esc(p.sp)}</div>
-    <p>Koordinator Tugas Akhir Program Studi S1 Teknologi Informasi dengan ini menetapkan:</p>
-    <table>
-      <tr><td>Nama mahasiswa</td><td>: ${esc(p.mhs)}</td></tr>
-      <tr><td>NIM</td><td>: ${esc(p.nim)}</td></tr>
-      <tr><td>Judul tugas akhir</td><td>: ${esc(p.judul)}</td></tr>
-      <tr><td>Dosen pembimbing</td><td>: ${esc(d.nama)} (NIDN ${esc(d.nidn)})</td></tr>
-      <tr><td>Periode</td><td>: ${esc(PERIODE.nama)}</td></tr>
-    </table>
-    <p>Penetapan ini berlaku sejak tanggal ditetapkan sampai tugas akhir selesai, kecuali ada perubahan yang disahkan koordinator.</p>
-    <div class="ttd">Surabaya, ${fmtDate(p.tglSah)}<br>Koordinator TA / Kaprodi
-      <div class="nama">${esc(USERS.koor.nama)}</div></div>
-  </div></body></html>`;
-
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
-}
-
 
 // ================= SESI & HAK AKSES (MR-08) =================
 var SESI_MAKS = 120 * 60 * 1000; // 120 menit ga aktif = sesi habis
@@ -1710,7 +1911,6 @@ function jagaSesi(role) {
   return true;
 }
 
-
 // ================= SINKRON ANTAR TAB =================
 // kalau tab lain (misal halaman dosen) ngubah data, tab ini ikut ke-update
 window.addEventListener('storage', function (e) {
@@ -1736,7 +1936,6 @@ window.addEventListener('storage', function (e) {
     });
   }
 });
-
 
 // data dimuat paling akhir, setelah semua fungsi di atas siap
 DB.load();

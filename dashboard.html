@@ -15,9 +15,9 @@
   <div class="grid-3">
     <!-- Kiri: kategori & cari cepat -->
     <aside class="sticky-col">
-      <h2 class="sec-title">Kategori &amp; Cari Cepat</h2>
+      <h2 class="sec-title">Cari Sekarang</h2>
       <div class="card-x pad">
-        <div class="search"><i class="bi bi-search"></i><input id="q" class="form-control" placeholder="Cari nama dosen, keahlian, atau topik..."></div>
+        <div class="search"><i class="bi bi-search"></i><input id="q" class="form-control" placeholder="Cari dosen atau topik..."></div>
         <div class="filter-label">Filter keahlian</div><div id="fBidang" class="d-flex flex-wrap gap-2"></div>
         <div class="filter-label">Filter status</div><div id="fStatus" class="d-flex flex-wrap gap-2"></div>
       </div>
@@ -26,7 +26,7 @@
     <!-- Tengah: daftar dosen real-time -->
     <section>
       <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
-        <h2 class="sec-title mb-0">Daftar Dosen &amp; Ketersediaan Real-time</h2>
+        <h2 class="sec-title mb-0">Daftar &amp; Ketersediaan Dosen Real-time</h2>
         <span class="live ms-auto">Live · <span class="live-ago">baru saja</span></span></div>
       <div class="small text-muted mb-3"><span id="count">0 dosen</span> · kuota rata-rata 6 mahasiswa per dosen · diperbarui otomatis tiap 5 detik</div>
       <div id="list"></div>
@@ -36,7 +36,8 @@
     <aside class="col-right">
       <h2 class="sec-title">Rekomendasi Dosen</h2>
       <div class="card-x pad mb-3">
-        <div class="d-flex justify-content-between align-items-center mb-2"><b>Berdasarkan judul &amp; abstrak</b><a href="#" id="contoh" class="small text-decoration-none" style="color:var(--red)">Isi contoh</a></div>
+        <div class="d-flex justify-content-between align-items-center mb-2"><b>Berdasarkan topik, judul &amp; abstrak</b><a href="#" id="contoh" class="small text-decoration-none" style="color:var(--red)">Isi contoh</a></div>
+        <input id="rTopik" class="form-control mb-2" maxlength="100" placeholder="Topik (contoh: Analisis sentimen)">
         <input id="rJudul" class="form-control mb-2" maxlength="200" placeholder="Judul TA">
         <textarea id="rAbs" class="form-control" rows="4" placeholder="Abstrak (150–300 kata)"></textarea>
         <div class="d-flex justify-content-between mt-1 mb-2"><span class="wc" id="rWc">0 kata</span></div>
@@ -64,6 +65,7 @@
 
   // di dashboard cukup 3 aja, sisanya di halaman cari
   mountRekom({
+    topik: $('#rTopik'),
     judul: $('#rJudul'),
     abs: $('#rAbs'),
     wc: $('#rWc'),
