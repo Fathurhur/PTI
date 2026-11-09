@@ -3,10 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\ArsipTopik;
+use App\Models\ArsipJudul;
 use App\Models\Dosen;
 use App\Models\KuotaDosen;
-use App\Models\KuotaPeminatan;
 use App\Models\LogAktivitas;
 use App\Models\Mahasiswa;
 use App\Models\Peminatan;
@@ -31,7 +30,7 @@ use InvalidArgumentException;
 
 /**
  * MR-07: administrasi periode, kuota, slot tambahan, pemindahan, pengesahan & surat PDF, rekap CSV.
- * MR-09: ambang kemiripan & impor arsip judul. MR-10: kuota peminatan. Impor data pengguna (CSV).
+ * MR-09: impor arsip judul. Impor data pengguna (CSV).
  */
 class KoordinatorController extends Controller
 {
@@ -56,8 +55,7 @@ class KoordinatorController extends Controller
     }
 
     /**
-     * Buka periode: kuota P1 & P2 tiap dosen = ceil(mahasiswa Penulisan Proposal / dosen aktif),
-     * kuota peminatan dibagi rata dari jumlah mahasiswa.
+     * Buka periode: kuota P1 & P2 tiap dosen = ceil(mahasiswa Penulisan Proposal / dosen aktif).
      */
     public function bukaPeriode(Request $request)
     {
@@ -86,14 +84,6 @@ class KoordinatorController extends Controller
                         'kuota'      => $dosen->menerima_bimbingan ? $kuota : 0,
                     ]);
                 }
-            }
-
-            foreach ($this->peminatan->hitungKuotaAwal($data['jumlah_mhs_proposal']) as $nama => $jumlah) {
-                KuotaPeminatan::create([
-                    'periode_id'   => $periode->id,
-                    'peminatan_id' => Peminatan::where('nama', $nama)->value('id'),
-                    'kuota'        => $jumlah,
-                ]);
             }
 
             LogAktivitas::catat('buka_periode', ['periode_id' => $periode->id, 'kuota_per_peran' => $kuota]);
@@ -131,18 +121,6 @@ class KoordinatorController extends Controller
         LogAktivitas::catat('tutup_periode', ['periode_id' => $periode->id]);
 
         return response()->json(['pesan' => "Periode {$periode->nama} ditutup."]);
-    }
-
-    /** MR-09: ambang kemiripan (0,5–1,0 atau 50–100). */
-    public function ubahAmbang(Request $request, Periode $periode)
-    {
-        $data = $request->validate(['ambang' => ['required', 'numeric']]);
-        $ambang = $this->kemiripan->validasiAmbang((float) $data['ambang']);
-
-        $periode->update(['ambang_kemiripan' => $ambang]);
-        LogAktivitas::catat('ubah_ambang', ['periode_id' => $periode->id, 'ambang' => $ambang]);
-
-        return response()->json(['pesan' => 'Ambang kemiripan diperbarui menjadi ' . ($ambang * 100) . '%.', 'ambang' => $ambang]);
     }
 
     // ---------------------------------------------------------
@@ -269,32 +247,6 @@ class KoordinatorController extends Controller
             'pesan'                => "Slot tambahan diberikan. Kuota sekarang {$kd->kuota} + {$kd->kuota_tambahan}.",
             'kuota'                => $kd,
             'antrean_dipromosikan' => $dipromosikan,
-        ]);
-    }
-
-    /** MR-10: kuota peminatan, tidak boleh di bawah jumlah terisi. */
-    public function ubahKuotaPeminatan(Request $request)
-    {
-        $data = $request->validate([
-            'peminatan' => ['required', Rule::in(PeminatanService::DAFTAR_PEMINATAN)],
-            'kuota'     => ['required', 'integer', 'min:0', 'max:2000'],
-        ]);
-        $periode = $this->periodeAktif();
-
-        $kp = DB::transaction(function () use ($data, $periode) {
-            $kp = KuotaPeminatan::where('periode_id', $periode->id)
-                ->where('peminatan_id', Peminatan::where('nama', $data['peminatan'])->value('id'))
-                ->lockForUpdate()->firstOrFail();
-            $this->peminatan->validasiUbahKuota($data['peminatan'], $data['kuota'], $kp->terisi);
-            $kp->update(['kuota' => $data['kuota']]);
-            LogAktivitas::catat('ubah_kuota_peminatan', $data);
-            return $kp;
-        });
-
-        return response()->json([
-            'pesan'     => "Kuota peminatan {$data['peminatan']} diperbarui.",
-            'peminatan' => $this->peminatan->ringkasanSlot($this->dashboard->kuotaPeminatanPerNama($periode)),
-            'kuota'     => $kp,
         ]);
     }
 
@@ -451,10 +403,6 @@ class KoordinatorController extends Controller
         ], $data['dosen']);
 
         $csv = $this->surat->exportRekapBebanCsv($dosen);
-        $csv .= "\nPeminatan,Kuota,Terisi,Sisa\n";
-        foreach ($data['peminatan'] as $p) {
-            $csv .= "{$p['peminatan']},{$p['kuota']},{$p['terisi']},{$p['sisa']}\n";
-        }
 
         return response($csv, 200, [
             'Content-Type'        => 'text/csv; charset=UTF-8',
@@ -480,7 +428,7 @@ class KoordinatorController extends Controller
 
         $baru = 0;
         foreach ($hasil['valid'] as $baris) {
-            $arsip = ArsipTopik::firstOrCreate(['judul' => $baris['judul'], 'tahun' => $baris['tahun']], $baris);
+            $arsip = ArsipJudul::firstOrCreate(['judul' => $baris['judul'], 'tahun' => $baris['tahun']], $baris);
             $baru += $arsip->wasRecentlyCreated ? 1 : 0;
         }
         LogAktivitas::catat('impor_arsip', ['baru' => $baru, 'galat' => count($hasil['galat'])]);

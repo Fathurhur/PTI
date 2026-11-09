@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
 
 /**
- * Endpoint bersama semua peran: dashboard slot (MR-01), profil & topik dosen (MR-02), notifikasi (MR-05).
+ * Endpoint bersama semua peran: dashboard slot (MR-01), profil dosen (MR-02), notifikasi (MR-05).
  */
 class UmumController extends Controller
 {
@@ -44,15 +44,12 @@ class UmumController extends Controller
     }
 
     /**
-     * MR-02: profil dosen beserta katalog topik rekomendasi aktif.
+     * MR-02: profil dosen.
      */
     public function profilDosen(Dosen $dosen)
     {
-        $dosen->load(['user:id,nama', 'peminatan', 'topik' => fn ($q) => $q->where('aktif', true)]);
+        $dosen->load(['user:id,nama', 'peminatan']);
         $periode = Periode::aktif();
-
-        $topikDiambil = \App\Models\Pengajuan::whereIn('status', \App\Models\Pengajuan::STATUS_AKTIF)
-            ->whereNotNull('topik_id')->pluck('topik_id')->all();
 
         return response()->json([
             'id'              => $dosen->id,
@@ -64,12 +61,6 @@ class UmumController extends Controller
             'menerima'        => $dosen->menerima_bimbingan,
             'kuota'           => $periode ? KuotaDosen::where(['periode_id' => $periode->id, 'dosen_id' => $dosen->id])->get()
                 ->map(fn ($k) => ['peran' => $k->peran, 'kuota' => $k->kuota, 'tambahan' => $k->kuota_tambahan, 'terisi' => $k->terisi, 'sisa' => $k->sisa()]) : [],
-            'topik'           => $dosen->topik->map(fn ($t) => [
-                'id'        => $t->id,
-                'judul'     => $t->judul,
-                'deskripsi' => $t->deskripsi,
-                'tersedia'  => !in_array($t->id, $topikDiambil, true),
-            ]),
         ]);
     }
 

@@ -99,7 +99,7 @@ function findDosen(id) {
 
 // dosen yg ga ketemu (misal belum dimuat) diganti data kosong biar tampilan ga error
 function dosenAtau(id) {
-  return findDosen(id) || { id: Number(id) || 0, nama: 'Dosen', nidn: '-', bidang: [], kata: [], topik: [], kuota: 0, kuota2: 0, terisi: 0, terisi2: 0, menerima: false, peminatan: '-' };
+  return findDosen(id) || { id: Number(id) || 0, nama: 'Dosen', nidn: '-', bidang: [], kata: [], saran: [], kuota: 0, kuota2: 0, terisi: 0, terisi2: 0, menerima: false, peminatan: '-' };
 }
 
 // ================= TOAST (notif kecil di pojok kanan atas) =================
@@ -276,7 +276,6 @@ var DB = {
     antrean: [],
     notif: { mhs: [], dosen: [], koor: [] },
     periode: null,
-    peminatan: []
   },
   terakhir: Date.now(),
   notifTerlihat: null, // id notif yg sudah pernah ditampilkan (biar toast cuma untuk yg baru)
@@ -321,8 +320,8 @@ var DB = {
         terisi2: p2.terisi,
         antrean: p1.antrean,
         antrean2: p2.antrean,
-        topik: (x.topik || []).map(function (t) {
-          return { id: t.id, judul: t.judul, desk: t.deskripsi || '-', aktif: true, tersedia: t.tersedia };
+        saran: (x.saran_judul || []).map(function (t) {
+          return { id: t.id, judul: t.judul, desk: t.deskripsi || '', tersedia: t.tersedia };
         })
       });
     });
@@ -338,7 +337,6 @@ var DB = {
       buka: true, berjalan: pr.berjalan, ambang: pr.ambang_kemiripan, jumlahMhs: pr.jumlah_mhs_proposal
     } : null;
     PERIODE = this.data.periode || { nama: '-', kode: '-', mulai: '', selesai: '', buka: false };
-    this.data.peminatan = r.data.peminatan || [];
     return true;
   },
 
@@ -359,11 +357,8 @@ var DB = {
         nim: x.nim,
         mahasiswaId: x.mahasiswa_id,
         dosenId: x.dosen_id,
-        topik: x.judul,
-        topikId: x.topik_id,
         judul: x.judul,
         abstrak: x.abstrak,
-        asal: x.asal_topik,
         peminatan: x.peminatan,
         status: x.status,
         tgl: waktuMs(x.dibuat_at),
@@ -389,7 +384,7 @@ var DB = {
       var d = DOSEN.find(function (x) { return x.nama === a.dosen; });
       return {
         id: 'a' + a.id, antreanId: a.id, me: true, peran: Number(a.peran), mhs: SESI.user.nama, nim: SESI.user.nim,
-        dosenId: d ? d.id : 0, topik: a.judul, judul: a.judul, abstrak: '', asal: 'Antrean (FIFO)', status: 'Antrean',
+        dosenId: d ? d.id : 0, judul: a.judul, abstrak: '', status: 'Antrean',
         posisi: a.posisi, tgl: waktuMs(a.masuk_at), tglMenunggu: waktuMs(a.masuk_at), alasan: '', dilihat: false
       };
     });
@@ -496,7 +491,7 @@ function peranKe(p) {
 }
 
 // dosen ini bisa dipilih jadi pembimbing 2: pembimbing 1 udah aktif, pembimbing 2 belum ada,
-// dosennya beda, dan masih ada slot. topik / keahlian dosen ga dipertimbangin (MR-10)
+// dosennya beda, dan masih ada slot. keahlian dosen ga dipertimbangin (MR-10)
 function bisaPembimbing2(d) {
   var p1 = State.p;
   if (!p1 || STATUS_SLOT.indexOf(p1.status) == -1) return false;
@@ -547,7 +542,7 @@ var State = {
     return !!p && STATUS_AKTIF.indexOf(p.status) != -1;
   },
 
-  // MR-03/04/09/10: kirim pengajuan. data = { dosenId, peran, judul, abstrak, topikId }
+  // MR-03/04/09/10: kirim pengajuan. data = { dosenId, peran, judul, abstrak, saranJudulId }
   ajukan: async function (data) {
     var d = findDosen(data.dosenId);
     var body = {
@@ -556,7 +551,7 @@ var State = {
       peminatan: data.peran == 2 ? null : d.peminatan, // P1 mengikuti peminatan utama dosen
       judul: data.judul,
       abstrak: data.abstrak,
-      topik_id: data.topikId || null
+      saran_judul_id: data.saranJudulId || null
     };
 
     var r = await Api.post('/pengajuan', body);
@@ -632,8 +627,8 @@ var Live = {
 
 // ================= REKOMENDASI DOSEN (MR-06) =================
 // dihitung di server (TF-IDF + cosine similarity), di sini cuma ditampilkan
-async function rekomendasiApi(topik, judul, abstrak) {
-  var r = await Api.post('/rekomendasi', { judul: judul, abstrak: (topik + ' ' + abstrak).trim(), peran: '1' });
+async function rekomendasiApi(judul, abstrak) {
+  var r = await Api.post('/rekomendasi', { judul: judul, abstrak: abstrak, peran: '1' });
   if (!r.ok) return { ok: false, msg: pesanError(r) };
 
   var hasil = [];
@@ -706,7 +701,7 @@ var MENU = {
   dosen: [
     ['#masuk', 'Pengajuan Masuk', 'masuk'],
     ['#bimbingan', 'Bimbingan Saya', 'bimbingan'],
-    ['#profil', 'Profil & Topik', 'profil']
+    ['#profil', 'Profil', 'profil']
   ],
   koor: [
     ['#rekap', 'Rekap Beban', 'rekap'],
@@ -875,11 +870,10 @@ function injectAjukanUI() {
     <div class="modal-body">
       <div id="mjInfo" class="mb-3"></div>
       <div id="mjFormTA">
-      <div class="mb-3" id="mjAsalWrap"><label class="form-label fw-bold">Asal topik</label>
-        <div class="d-flex gap-2 flex-wrap">
-          <label class="chip" id="lblSendiri"><input type="radio" name="asal" value="sendiri" class="d-none" checked><i class="bi bi-lightbulb"></i> Usulan saya sendiri</label>
-          <label class="chip" id="lblRek"><input type="radio" name="asal" value="rekom" class="d-none"><i class="bi bi-bookmark-star"></i> Topik rekomendasi dosen</label></div>
-        <select id="mjTopik" class="form-select mt-2 d-none"></select></div>
+      <div class="mb-3" id="mjSaranWrap" hidden>
+        <label class="form-label fw-bold">Saran judul dari dosen</label>
+        <div class="small text-muted mb-2">Pilih jika ada yang cocok, judul terisi otomatis. Setiap saran hanya bisa dipakai satu mahasiswa. Abstrak tetap Anda tulis sendiri.</div>
+        <div id="mjSaranList"></div></div>
       <div class="mb-3"><div class="d-flex justify-content-between"><label class="form-label fw-bold">Judul TA</label><span class="wc" id="mjJudulWc">0/200</span></div>
         <input id="mjJudul" class="form-control" maxlength="200" placeholder="Tulis judul tugas akhir"></div>
       <div class="mb-1"><div class="d-flex justify-content-between"><label class="form-label fw-bold">Abstrak</label><span class="wc" id="mjAbsWc">0 kata (wajib 150–300)</span></div>
@@ -905,15 +899,41 @@ function injectAjukanUI() {
   var timerMirip = null;
   var nomorCek = 0;
 
-  function pakaiRekom() {
-    return $('input[name=asal]:checked').value == 'rekom';
+  // saran judul yang sedang dipilih (null = tulis judul sendiri)
+  function saranTerpilih() {
+    var r = $('input[name=saran]:checked');
+    var id = r ? Number(r.value) : 0;
+    if (!id || !dosenDipilih) return null;
+    return (dosenDipilih.saran || []).find(function (x) { return x.id === id; }) || null;
   }
 
-  function topikTerpilih() {
-    var idTopik = Number($('#mjTopik').value);
-    return topikAktif(dosenDipilih).find(function (x) {
-      return x.id === idTopik;
+  function gambarSaran() {
+    var daftar = dosenDipilih ? (dosenDipilih.saran || []) : [];
+    var tampil = daftar.length > 0 && pembimbingKe == 1 && !modeAntrean;
+    $('#mjSaranWrap').hidden = !tampil;
+    if (!tampil) {
+      $('#mjSaranList').innerHTML = '';
+      return;
+    }
+    var html = `<label class="d-flex gap-2 align-items-start card-x pad mb-2" style="box-shadow:none;cursor:pointer"><input type="radio" name="saran" value="0" class="mt-1" checked><div><b>Tulis judul sendiri</b></div></label>`;
+    html += daftar.map(function (t) {
+      var ket = t.tersedia ? '' : ' <span class="badge-s penuh ms-1">Sudah dipakai mahasiswa lain</span>';
+      return `<label class="d-flex gap-2 align-items-start card-x pad mb-2 ${t.tersedia ? '' : 'opacity-50'}" style="box-shadow:none;cursor:${t.tersedia ? 'pointer' : 'not-allowed'}"><input type="radio" name="saran" value="${t.id}" class="mt-1" ${t.tersedia ? '' : 'disabled'}>
+        <div><b>${esc(t.judul)}</b>${ket}${t.desk ? `<div class="small text-muted mt-1">${esc(t.desk)}</div>` : ''}</div></label>`;
+    }).join('');
+    $('#mjSaranList').innerHTML = html;
+    $$('input[name=saran]').forEach(function (r) {
+      r.addEventListener('change', syncSaran);
     });
+  }
+
+  // judul terisi otomatis dan terkunci saat memakai saran judul
+  function syncSaran() {
+    var t = saranTerpilih();
+    $('#mjJudul').readOnly = !!t;
+    if (t) $('#mjJudul').value = t.judul;
+    updateJudulWc();
+    jadwalCekMirip();
   }
 
   function updateJudulWc() {
@@ -929,26 +949,16 @@ function injectAjukanUI() {
     el.className = 'wc ' + kelas;
   }
 
-  // judul otomatis keisi kalo pilih topik rekomendasi
-  function isiTopik() {
-    var t = topikTerpilih();
-    if (t) {
-      $('#mjJudul').value = t.judul;
-      updateJudulWc();
-    }
-    jadwalCekMirip();
-  }
-
   // MR-09: cek kemiripan ke server (ditunda 700 ms biar ga tiap ketikan)
   function jadwalCekMirip() {
     clearTimeout(timerMirip);
     $('#mjAksiLain').innerHTML = '';
     var judul = $('#mjJudul').value.trim();
 
-    if (pembimbingKe == 2 || !judul || (pakaiRekom() && !modeAntrean)) {
+    if (pembimbingKe == 2 || !judul || saranTerpilih()) {
       $('#mjErr').textContent = '';
-      $('#mjWarn').hidden = !(pakaiRekom() && !modeAntrean && pembimbingKe == 1);
-      $('#mjWarn').innerHTML = '<i class="bi bi-bookmark-check me-1"></i>Topik rekomendasi dosen tidak diperiksa kemiripannya. Topik ini hanya bisa diambil satu mahasiswa (yang pertama mengajukan).';
+      $('#mjWarn').hidden = !(pembimbingKe == 1 && saranTerpilih());
+      $('#mjWarn').innerHTML = '<i class="bi bi-lightbulb me-1"></i>Saran judul dosen tidak diperiksa kemiripannya. Saran ini hanya bisa dipakai satu mahasiswa (yang pertama mengajukan).';
       $('#mjSubmit').disabled = false;
       return;
     }
@@ -971,20 +981,6 @@ function injectAjukanUI() {
     }, 700);
   }
 
-  function syncAsal() {
-    var rek = pakaiRekom();
-    $('#lblRek').classList.toggle('on', rek);
-    $('#lblSendiri').classList.toggle('on', !rek);
-    $('#mjTopik').classList.toggle('d-none', !rek);
-    $('#mjJudul').readOnly = rek;
-    if (rek) isiTopik();
-    else jadwalCekMirip();
-  }
-
-  $$('input[name=asal]').forEach(function (r) {
-    r.addEventListener('change', syncAsal);
-  });
-  $('#mjTopik').addEventListener('change', isiTopik);
   $('#mjJudul').addEventListener('input', function () {
     updateJudulWc();
     jadwalCekMirip();
@@ -1015,21 +1011,15 @@ function injectAjukanUI() {
     }
 
     if (peran == 1) {
-      var bidang = DB.data.peminatan.find(function (x) { return x.peminatan === d.peminatan; });
-      info += `<div class="small mt-2"><i class="bi bi-diagram-3 me-1"></i>Peminatan: <b>${esc(d.peminatan)}</b> (mengikuti peminatan utama dosen)${bidang ? ' · sisa slot peminatan ' + bidang.sisa + ' dari ' + bidang.kuota : ''}</div>`;
+      info += `<div class="small mt-2"><i class="bi bi-diagram-3 me-1"></i>Peminatan: <b>${esc(d.peminatan)}</b> (mengikuti peminatan utama dosen)</div>`;
     }
     $('#mjInfo').innerHTML = info;
 
-    // antrean ga bisa pakai topik rekomendasi dosen
-    var daftarTopik = topikAktif(d).filter(function (t) { return t.tersedia; });
-    $('#lblRek').classList.toggle('d-none', daftarTopik.length == 0 || antrean);
-    if (antrean && pakaiRekom()) {
-      $('input[name=asal][value=sendiri]').checked = true;
-    }
-    syncAsal();
+    gambarSaran();
+    syncSaran();
   }
 
-  // buka modal ajukan. opt = { peran, topikId, antrean }
+  // buka modal ajukan. opt = { peran, antrean }
   window.openAjukan = function (dosenId, opt) {
     if (!opt) opt = {};
     var d = findDosen(dosenId);
@@ -1075,13 +1065,9 @@ function injectAjukanUI() {
     dosenDipilih = d;
     $('#mjFormTA').hidden = peran == 2;
 
-    var daftarTopik = topikAktif(d).filter(function (t) { return t.tersedia; });
-    $('#mjTopik').innerHTML = daftarTopik.map(function (t) {
-      return `<option value="${t.id}">${esc(t.judul)}</option>`;
-    }).join('');
-
     // reset form
     $('#mjJudul').value = '';
+    $('#mjJudul').readOnly = false;
     $('#mjAbs').value = '';
     $('#mjErr').textContent = '';
     $('#mjAksiLain').innerHTML = '';
@@ -1089,13 +1075,6 @@ function injectAjukanUI() {
     $('#mjSubmit').disabled = false;
     updateJudulWc();
     updateAbsWc();
-    $('input[name=asal][value=sendiri]').checked = true;
-
-    // kalo dibuka dari tombol "Pilih topik ini"
-    if (opt.topikId && daftarTopik.length > 0) {
-      $('input[name=asal][value=rekom]').checked = true;
-      $('#mjTopik').value = opt.topikId;
-    }
 
     aturMode(!!opt.antrean || sisa(d, peran) === 0);
 
@@ -1110,13 +1089,12 @@ function injectAjukanUI() {
       var p1 = State.p;
       return { dosenId: dosenDipilih.id, peran: 2, judul: p1.judul, abstrak: p1.abstrak };
     }
-    var t = pakaiRekom() && !modeAntrean ? topikTerpilih() : null;
     return {
       dosenId: dosenDipilih.id,
       peran: 1,
       judul: $('#mjJudul').value.trim(),
       abstrak: $('#mjAbs').value,
-      topikId: t ? t.id : null
+      saranJudulId: !modeAntrean && saranTerpilih() ? saranTerpilih().id : null
     };
   }
 
@@ -1147,6 +1125,16 @@ function injectAjukanUI() {
       return;
     }
 
+    // saran judul keburu dipakai mahasiswa lain: segarkan daftar lalu kembali ke judul sendiri
+    if (r.kode === 'saran_diambil') {
+      await DB.segarkan();
+      dosenDipilih = findDosen(dosenDipilih.id) || dosenDipilih;
+      gambarSaran();
+      syncSaran();
+      err.textContent = r.msg;
+      return;
+    }
+
     err.textContent = r.msg;
 
     // MR-04/05: slot keburu penuh -> tawarkan antrean / peran lain
@@ -1162,11 +1150,6 @@ function injectAjukanUI() {
         aturMode(true);
         kirim();
       };
-    }
-
-    // MR-10: peminatan penuh -> hanya saran peminatan lain
-    if (r.kode === 'peminatan_penuh' && r.saran.length) {
-      $('#mjAksiLain').innerHTML = `<div class="hint-box"><i class="bi bi-signpost-split me-1"></i>Peminatan yang masih tersedia: ${r.saran.map(function (s) { return '<b>' + esc(s.peminatan) + '</b> (' + s.sisa + ' slot)'; }).join(', ')}. Pilih dosen dengan peminatan tersebut di daftar dosen.</div>`;
     }
 
     DB.segarkan();
@@ -1193,23 +1176,13 @@ function injectAjukanUI() {
     }).join('');
 
     var bisaP1 = d.menerima && sisa(d, 1) > 0;
-    var topikHTML = topikAktif(d).map(function (t) {
-      var tombolTopik = !t.tersedia
-        ? '<button class="btn btn-ghost btn-sm" disabled>Sudah diambil mahasiswa lain</button>'
-        : `<button class="btn btn-ghost btn-sm" ${bisaP1 ? '' : 'disabled'} onclick="openAjukan(${d.id},{topikId:${t.id}})">Pilih topik ini</button>`;
-      return `<div class="card-x pad mb-2"><b>${esc(t.judul)}</b><div class="small text-muted my-1">${esc(t.desk)}</div>${tombolTopik}</div>`;
-    }).join('');
-    if (!topikHTML) {
-      topikHTML = '<div class="small text-muted">Dosen belum menawarkan topik.</div>';
-    }
-
     var tombol = '';
     if (!d.menerima) {
       tombol = '<button class="btn btn-ghost" disabled>Dosen tidak menerima bimbingan</button>';
     } else if (!bisaP1) {
       tombol = `<button class="btn btn-outline-dark" onclick="openAjukan(${d.id},{antrean:true})"><i class="bi bi-hourglass-split me-1"></i>Penuh – masuk antrean Pembimbing 1 (${d.antrean} antre)</button>`;
     } else {
-      tombol = `<button class="btn btn-red" onclick="openAjukan(${d.id})">Ajukan dengan topik sendiri</button>`;
+      tombol = `<button class="btn btn-red" onclick="openAjukan(${d.id})">Ajukan Pembimbing 1</button>`;
     }
 
     $('#ocBody').innerHTML = `
@@ -1223,8 +1196,6 @@ function injectAjukanUI() {
         <div class="small text-muted">Sisa ${sisa(d, 2)} slot${d.antrean2 ? ' · ' + d.antrean2 + ' di antrean' : ''}</div></div>
       <div class="filter-label mt-0">Bidang keahlian</div>${bidangHTML}
       <div class="filter-label">Kata kunci</div>${kataHTML}
-      <div class="filter-label">Topik yang ditawarkan</div>
-      ${topikHTML}
       <div class="d-grid gap-2 mt-3">${tombol}${bisaPembimbing2(d) ? `<button class="btn btn-outline-dark" onclick="openAjukan(${d.id},{peran:2})">Pilih sebagai Pembimbing 2</button>` : ''}</div>`;
 
     offcanvas.show();
@@ -1291,11 +1262,11 @@ function dosenCardHTML(d) {
       <div class="slot-text"><b>Pembimbing 1</b> · Terisi <b>${d.terisi}</b> · Sisa <b>${sisa(d, 1)}</b> / Kuota <b>${esc(d.labelKuota)}</b>${antre(d.antrean)}</div>
       <div class="slots">${slotHTML(d.kuota2, d.terisi2)}</div>
       <div class="slot-text"><b>Pembimbing 2</b> · Terisi <b>${d.terisi2}</b> · Sisa <b>${sisa(d, 2)}</b> / Kuota <b>${esc(d.labelKuota2)}</b>${antre(d.antrean2)}</div>
-      <div class="d-flex gap-2 flex-wrap mt-3">${tombol}<button class="btn btn-ghost" data-detail="${d.id}"><i class="bi bi-person-lines-fill me-1"></i>Profil &amp; Topik</button></div>
+      <div class="d-flex gap-2 flex-wrap mt-3">${tombol}<button class="btn btn-ghost" data-detail="${d.id}"><i class="bi bi-person-lines-fill me-1"></i>Profil</button></div>
     </div></div>`;
 }
 
-// ================= PERIODE, TOPIK, WAKTU =================
+// ================= PERIODE, WAKTU =================
 
 // tanggal hari ini (zona lokal) format YYYY-MM-DD, biar bisa dibandingin sama input date
 function tglLokal(ts) {
@@ -1350,13 +1321,6 @@ function renderChipPeriode() {
   var per = periodeAktif();
   el.innerHTML = `<i class="bi bi-calendar-event me-1"></i>Periode ${esc(PERIODE.nama)} · ${per.label}`;
   el.classList.toggle('tutup', !per.ok);
-}
-
-// topik yg dinonaktifkan dosen ga ditampilin ke mahasiswa
-function topikAktif(d) {
-  return (d.topik || []).filter(function (t) {
-    return t.aktif !== false;
-  });
 }
 
 // ================= SESI (MR-08) =================

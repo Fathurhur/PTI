@@ -60,21 +60,19 @@ class AutentikasiService
 
         // Dosen (MR-02, MR-03)
         'profil_dosen.kelola'      => [self::PERAN_DOSEN],
-        'topik_dosen.kelola'       => [self::PERAN_DOSEN],
+        'saran_judul.kelola'       => [self::PERAN_DOSEN],
         'pengajuan.putuskan'       => [self::PERAN_DOSEN],
         'bimbingan.lihat'          => [self::PERAN_DOSEN],
 
         // Koordinator (MR-07, MR-09, MR-10)
         'periode.kelola'           => [self::PERAN_KOORDINATOR],
         'kuota_dosen.kelola'       => [self::PERAN_KOORDINATOR],
-        'kuota_peminatan.kelola'   => [self::PERAN_KOORDINATOR],
         'slot_tambahan.beri'       => [self::PERAN_KOORDINATOR],
         'pengajuan.pindahkan'      => [self::PERAN_KOORDINATOR],
         'penetapan.sahkan'         => [self::PERAN_KOORDINATOR],
         'rekap_beban.ekspor'       => [self::PERAN_KOORDINATOR],
         'data_pengguna.impor'      => [self::PERAN_KOORDINATOR],
         'arsip_judul.impor'        => [self::PERAN_KOORDINATOR],
-        'ambang_kemiripan.atur'    => [self::PERAN_KOORDINATOR],
     ];
 
     /**

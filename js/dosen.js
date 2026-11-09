@@ -1,13 +1,13 @@
 // dosen.js
-// script halaman dosen. data diambil dari backend (pengajuan yg ditujukan ke dosen ini, profil, topik)
+// script halaman dosen. data diambil dari backend (pengajuan yg ditujukan ke dosen ini, profil)
 
 var ME = null;          // data dosen yg login (dari dashboard: kuota, terisi)
-var PROFIL = null;      // profil lengkap dari /api/dosen-saya/profil (termasuk topik nonaktif)
+var PROFIL = null;      // profil lengkap dari /api/dosen-saya/profil
 
 var tolakId = null;     // id pengajuan yg mau ditolak
-var topikEditId = null; // id topik yg lagi diubah, null = tambah baru
 var modalTolak = null;
-var modalTopik = null;
+var saranEditId = null; // id saran judul yg lagi diubah, null = tambah baru
+var modalSaran = null;
 
 // draft profil, baru disimpan ke server pas klik "Simpan profil"
 var PROF = null;
@@ -95,7 +95,7 @@ function drawMasuk() {
           <span class="sbadge sb-Menunggu"><i class="bi bi-clock me-1"></i>${sisaWaktu(m)}</span></div>
         <div class="fw-bold mt-2">${esc(m.judul)}</div>
         <div class="small text-muted my-2" style="line-height:1.6">${esc(m.abstrak)}</div>
-        <span class="tag">Pembimbing ${peranKe(m)}</span>${m.peminatan ? `<span class="tag">${esc(m.peminatan)}</span>` : ''}<span class="tag">${esc(m.asal)}</span>
+        <span class="tag">Pembimbing ${peranKe(m)}</span>${m.peminatan ? `<span class="tag">${esc(m.peminatan)}</span>` : ''}
         <div class="d-flex gap-2 mt-2"><button class="btn btn-red btn-sm" onclick="terima(${m.id}, this)"><i class="bi bi-check2 me-1"></i>Terima</button>
           <button class="btn btn-ghost btn-sm" onclick="bukaTolak(${m.id})"><i class="bi bi-x me-1"></i>Tolak</button></div>
       </div></div></div>`;
@@ -190,7 +190,7 @@ function drawBimb() {
 function drawProfil() {
   drawSaklar();
   drawFormProfil();
-  drawTopik();
+  drawSaran();
 }
 
 function drawSaklar() {
@@ -290,38 +290,38 @@ async function simpanProfil(btn) {
 }
 
 
-// ===== TOPIK REKOMENDASI (MR-02) =====
-function drawTopik() {
-  var html = PROFIL.topik.map(function (t) {
+// ===== SARAN JUDUL =====
+function drawSaran() {
+  var html = PROFIL.saran_judul.map(function (t) {
     var aktif = !!t.aktif;
     return `<div class="card-x pad mb-2 ${aktif ? '' : 'opacity-50'}"><div class="d-flex justify-content-between gap-2"><div><b>${esc(t.judul)}</b><div class="small text-muted">${esc(t.deskripsi || '-')}</div></div>
-    <div class="d-flex align-items-start gap-2"><button class="btn btn-ghost btn-sm text-nowrap" onclick="bukaTopik(${t.id})"><i class="bi bi-pencil me-1"></i>Ubah</button>
-    <div class="form-check form-switch m-0" title="Aktif / nonaktif"><input class="form-check-input" type="checkbox" ${aktif ? 'checked' : ''} onchange="setTopikAktif(${t.id}, this.checked)"></div></div></div></div>`;
+    <div class="d-flex align-items-start gap-2"><button class="btn btn-ghost btn-sm text-nowrap" onclick="bukaSaran(${t.id})"><i class="bi bi-pencil me-1"></i>Ubah</button>
+    <div class="form-check form-switch m-0" title="Aktif / nonaktif"><input class="form-check-input" type="checkbox" ${aktif ? 'checked' : ''} onchange="setSaranAktif(${t.id}, this.checked)"></div></div></div></div>`;
   }).join('');
 
-  $('#topikList').innerHTML = html || '<div class="card-x empty"><i class="bi bi-bookmark"></i>Belum ada rekomendasi topik.</div>';
+  $('#saranList').innerHTML = html || '<div class="card-x empty"><i class="bi bi-lightbulb"></i>Belum ada saran judul.</div>';
 }
 
-function bukaTopik(id) {
-  topikEditId = id || null;
-  var t = topikEditId ? PROFIL.topik.find(function (x) { return x.id === topikEditId; }) : null;
+function bukaSaran(id) {
+  saranEditId = id || null;
+  var t = saranEditId ? PROFIL.saran_judul.find(function (x) { return x.id === saranEditId; }) : null;
 
-  $('#tTitle').textContent = t ? 'Ubah rekomendasi topik' : 'Tambah rekomendasi topik';
-  $('#tJudul').value = t ? t.judul : '';
-  $('#tDesk').value = t ? (t.deskripsi || '') : '';
-  modalTopik.show();
+  $('#sTitle').textContent = t ? 'Ubah saran judul' : 'Tambah saran judul';
+  $('#sJudul').value = t ? t.judul : '';
+  $('#sDesk').value = t ? (t.deskripsi || '') : '';
+  modalSaran.show();
 }
 
-async function simpanTopik(btn) {
-  var judul = $('#tJudul').value.trim();
+async function simpanSaran(btn) {
+  var judul = $('#sJudul').value.trim();
   if (!judul) {
-    toast('Judul topik wajib diisi.', 'danger');
+    toast('Judul saran wajib diisi.', 'danger');
     return;
   }
 
-  var body = { judul: judul, deskripsi: $('#tDesk').value.trim() || null };
+  var body = { judul: judul, deskripsi: $('#sDesk').value.trim() || null };
   tombolSibuk(btn, true, 'Menyimpan...');
-  var r = topikEditId ? await Api.put('/dosen-saya/topik/' + topikEditId, body) : await Api.post('/dosen-saya/topik', body);
+  var r = saranEditId ? await Api.put('/dosen-saya/saran-judul/' + saranEditId, body) : await Api.post('/dosen-saya/saran-judul', body);
   tombolSibuk(btn, false);
 
   if (!r.ok) {
@@ -329,24 +329,23 @@ async function simpanTopik(btn) {
     return;
   }
 
-  modalTopik.hide();
+  modalSaran.hide();
   await muatProfil();
-  drawTopik();
+  drawSaran();
   DB.segarkan();
-  toast(topikEditId ? 'Topik diperbarui.' : 'Topik ditambahkan.', 'success');
+  toast(saranEditId ? 'Saran judul diperbarui.' : 'Saran judul ditambahkan.', 'success');
 }
 
-async function setTopikAktif(id, nilai) {
-  var r = await Api.put('/dosen-saya/topik/' + id, { aktif: nilai });
+async function setSaranAktif(id, nilai) {
+  var r = await Api.put('/dosen-saya/saran-judul/' + id, { aktif: nilai });
   if (!r.ok) {
     toast(pesanError(r), 'danger');
   } else {
-    toast(nilai ? 'Topik diaktifkan, tampil di halaman mahasiswa.' : 'Topik dinonaktifkan, disembunyikan dari mahasiswa.', 'dark');
+    toast(nilai ? 'Saran judul diaktifkan, tampil di halaman mahasiswa.' : 'Saran judul dinonaktifkan, disembunyikan dari mahasiswa.', 'dark');
   }
   await muatProfil();
-  drawTopik();
+  drawSaran();
 }
-
 
 // ===== MULAI =====
 async function initDosen() {
@@ -354,7 +353,7 @@ async function initDosen() {
   await muatProfil();
 
   modalTolak = new bootstrap.Modal('#mTolak');
-  modalTopik = new bootstrap.Modal('#mTopik');
+  modalSaran = new bootstrap.Modal('#mSaran');
 
   salinProfil();
   drawMasuk();

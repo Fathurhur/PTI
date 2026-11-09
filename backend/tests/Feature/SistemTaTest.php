@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\Antrean;
 use App\Models\Dosen;
 use App\Models\KuotaDosen;
-use App\Models\KuotaPeminatan;
 use App\Models\Mahasiswa;
 use App\Models\Notifikasi;
 use App\Models\Pengajuan;
@@ -101,14 +100,13 @@ class SistemTaTest extends TestCase
 
     // ---------- MR-01 ----------
 
-    public function test_mr01_dashboard_menampilkan_slot_per_peran_dan_peminatan(): void
+    public function test_mr01_dashboard_menampilkan_slot_per_peran_dan_saran_judul(): void
     {
         $res = $this->actingAs($this->mhs('1202230013'))->getJson('/api/dashboard')->assertOk();
 
         $res->assertJsonStructure([
             'periode' => ['nama', 'kode'],
-            'dosen' => [['nama', 'status', 'pembimbing_1' => ['kuota', 'terisi', 'sisa', 'antrean'], 'pembimbing_2']],
-            'peminatan' => [['peminatan', 'kuota', 'terisi', 'sisa']],
+            'dosen' => [['nama', 'status', 'pembimbing_1' => ['kuota', 'terisi', 'sisa', 'antrean'], 'pembimbing_2', 'saran_judul']],
         ]);
 
         $helmy = collect($res->json('dosen'))->firstWhere('nidn', '0415079002');
@@ -187,7 +185,7 @@ class SistemTaTest extends TestCase
         $sebelum = $this->kuota('0412038801', '1')->terisi;
 
         $this->postJson("/api/pengajuan/{$bagus->id}/putuskan", ['keputusan' => 'tolak', 'alasan' => 'pendek'])->assertStatus(422);
-        $this->postJson("/api/pengajuan/{$bagus->id}/putuskan", ['keputusan' => 'tolak', 'alasan' => 'Topik sudah terlalu banyak dibimbing.'])
+        $this->postJson("/api/pengajuan/{$bagus->id}/putuskan", ['keputusan' => 'tolak', 'alasan' => 'Kuota bimbingan sudah terlalu banyak.'])
             ->assertOk()->assertJsonPath('pengajuan.status', 'Ditolak');
 
         $this->assertSame($sebelum - 1, $this->kuota('0412038801', '1')->terisi);
@@ -198,14 +196,28 @@ class SistemTaTest extends TestCase
             ->postJson("/api/pengajuan/{$lain->id}/putuskan", ['keputusan' => 'terima'])->assertStatus(403);
     }
 
-    public function test_mr03_topik_dosen_hanya_untuk_satu_mahasiswa(): void
+    public function test_mr03_saran_judul_dosen_hanya_untuk_satu_mahasiswa(): void
     {
-        $topik = Pengajuan::whereNotNull('topik_id')->where('status', 'Menunggu')->firstOrFail()->topik_id;
+        $dosen = $this->dosen('0412038801');
+        $saran = \App\Models\SaranJudul::where('dosen_id', $dosen->id)->firstOrFail();
 
-        $this->actingAs($this->mhs('1202230013'))->postJson('/api/pengajuan', [
-            'dosen_id' => $this->dosen('0412038801')->id, 'peran' => '1', 'peminatan' => 'IoT',
-            'topik_id' => $topik, 'abstrak' => $this->abstrak('edge ai'),
-        ])->assertStatus(422)->assertJsonPath('kode', 'topik_diambil');
+        $res = $this->actingAs($this->mhs('1202230013'))->postJson('/api/pengajuan', [
+            'dosen_id' => $dosen->id, 'peran' => '1', 'peminatan' => 'IoT',
+            'saran_judul_id' => $saran->id, 'abstrak' => $this->abstrak('irigasi tanaman'),
+        ])->assertStatus(201);
+        $this->assertSame($saran->judul, $res->json('pengajuan.judul'));
+
+        $this->actingAs($this->mhs('1202230203'))->postJson('/api/pengajuan', [
+            'dosen_id' => $dosen->id, 'peran' => '1', 'peminatan' => 'IoT',
+            'saran_judul_id' => $saran->id, 'abstrak' => $this->abstrak('irigasi tanaman'),
+        ])->assertStatus(422)->assertJsonPath('kode', 'saran_diambil');
+
+        // saran dosen lain tidak bisa dipakai pada dosen ini
+        $lain = \App\Models\SaranJudul::where('dosen_id', '!=', $dosen->id)->firstOrFail();
+        $this->postJson('/api/pengajuan', [
+            'dosen_id' => $dosen->id, 'peran' => '1', 'peminatan' => 'IoT',
+            'saran_judul_id' => $lain->id, 'abstrak' => $this->abstrak('irigasi tanaman'),
+        ])->assertStatus(422);
     }
 
     // ---------- MR-04 + MR-05 ----------
@@ -229,7 +241,7 @@ class SistemTaTest extends TestCase
         $p->update(['status' => 'Menunggu', 'kedaluwarsa_at' => now()->addDay()]);
 
         $this->actingAs($helmy->user)->postJson("/api/pengajuan/{$p->id}/putuskan", [
-            'keputusan' => 'tolak', 'alasan' => 'Mahasiswa diminta mencari topik lain.',
+            'keputusan' => 'tolak', 'alasan' => 'Mahasiswa diminta mencari judul lain.',
         ])->assertOk();
 
         $mhsId = Mahasiswa::where('nim', '1202230203')->value('id');
@@ -331,7 +343,6 @@ class SistemTaTest extends TestCase
     {
         $res = $this->actingAs($this->koordinator())->get('/api/koordinator/rekap.csv')->assertOk();
         $this->assertStringContainsString('NIDN,"Nama Dosen"', $res->getContent());
-        $this->assertStringContainsString('Peminatan,Kuota,Terisi,Sisa', $res->getContent());
     }
 
     // ---------- MR-09 ----------
@@ -345,32 +356,5 @@ class SistemTaTest extends TestCase
 
         $this->assertSame('arsip', $res->json('kemiripan.pembanding.sumber'));
         $this->assertSame(2024, $res->json('kemiripan.pembanding.tahun'));
-    }
-
-    public function test_mr09_koordinator_ubah_ambang(): void
-    {
-        $periode = \App\Models\Periode::aktif();
-        $this->actingAs($this->koordinator())->putJson("/api/koordinator/periode/{$periode->id}/ambang", ['ambang' => 90])
-            ->assertOk()->assertJsonPath('ambang', 0.9);
-        $this->putJson("/api/koordinator/periode/{$periode->id}/ambang", ['ambang' => 0.2])->assertStatus(422);
-    }
-
-    // ---------- MR-10 ----------
-
-    public function test_mr10_peminatan_penuh_ditolak_dengan_saran_peminatan_lain(): void
-    {
-        $iot = KuotaPeminatan::whereHas('peminatan', fn ($q) => $q->where('nama', 'IoT'))->firstOrFail();
-
-        $this->actingAs($this->koordinator())->putJson('/api/koordinator/kuota-peminatan', ['peminatan' => 'IoT', 'kuota' => $iot->terisi - 1])
-            ->assertStatus(422);
-        $this->putJson('/api/koordinator/kuota-peminatan', ['peminatan' => 'IoT', 'kuota' => $iot->terisi])->assertOk();
-
-        $res = $this->actingAs($this->mhs('1202230013'))->postJson('/api/pengajuan', [
-            'dosen_id' => $this->dosen('0412038801')->id, 'peran' => '1', 'peminatan' => 'IoT',
-            'judul' => 'Sistem Peringatan Dini Banjir Rob Berbasis LoRaWAN', 'abstrak' => $this->abstrak('banjir rob'),
-        ])->assertStatus(422)->assertJsonPath('kode', 'peminatan_penuh');
-
-        $this->assertEqualsCanonicalizing(['AI', 'Cyber'], array_column($res->json('saran'), 'peminatan'));
-        $this->assertSame($iot->terisi, $iot->fresh()->terisi);
     }
 }

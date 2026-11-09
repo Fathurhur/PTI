@@ -10,7 +10,6 @@ namespace App\Services;
  * - Antrean berurutan FIFO (First In First Out) per dosen per peran
  * - Saat slot terbuka, mahasiswa urutan pertama yang memenuhi syarat dipromosikan <= 1 menit
  * - Notifikasi in-app dan email dikirim ke semua pihak yang terkait
- * - Mahasiswa P1 yang dipromosikan wajib masih punya kuota peminatan (MR-10)
  * - Mahasiswa tidak boleh sudah punya pengajuan aktif di peran yang sama (MR-03)
  */
 class AntreanService
@@ -54,12 +53,10 @@ class AntreanService
      * Syarat promosi:
      * 1. Urutan FIFO (created_at paling lama = paling pertama)
      * 2. Belum punya pengajuan aktif di peran yang sama (MR-03)
-     * 3. Jika Pembimbing 1: kuota peminatan mahasiswa masih ada (MR-10)
      *
      * @param int    $dosenId                 ID dosen yang slotnya baru terbuka
      * @param string $peran                   '1' atau '2'
      * @param array  $daftarAntrean           Semua antrean status 'menunggu', urut created_at ASC
-     * @param array  $kuotaPeminatan          ['peminatan_id' => ['kuota' => x, 'terisi' => y], ...]
      * @param array  $pengajuanAktifMahasiswa ['1' => [mhs_id, ...], '2' => [mhs_id, ...]]
      * @return array|null Data antrean kandidat, atau null jika tidak ada yang memenuhi syarat
      */
@@ -67,7 +64,6 @@ class AntreanService
         int    $dosenId,
         string $peran,
         array  $daftarAntrean,
-        array  $kuotaPeminatan,
         array  $pengajuanAktifMahasiswa
     ): ?array {
         foreach ($daftarAntrean as $antre) {
@@ -85,21 +81,6 @@ class AntreanService
             $aktifDiPeran = $pengajuanAktifMahasiswa[$peran] ?? [];
             if (in_array($mhsId, $aktifDiPeran)) {
                 continue;
-            }
-
-            // Syarat 2: Jika Pembimbing 1, cek sisa kuota peminatan (MR-10)
-            if ($peran === '1') {
-                $pidBidang  = $antre['peminatan_id'] ?? null;
-                $infoBidang = $kuotaPeminatan[$pidBidang] ?? null;
-
-                if (!$infoBidang) {
-                    continue; // Data peminatan tidak ditemukan, lewati
-                }
-
-                $sisaBidang = ($infoBidang['kuota'] ?? 0) - ($infoBidang['terisi'] ?? 0);
-                if ($sisaBidang <= 0) {
-                    continue; // Kuota peminatan penuh, lewati mahasiswa ini
-                }
             }
 
             // Kandidat pertama yang lolos semua syarat (FIFO)

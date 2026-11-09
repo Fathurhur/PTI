@@ -14,6 +14,6 @@ class Dosen extends Model
 
     public function user() { return $this->belongsTo(User::class); }
     public function peminatan() { return $this->belongsTo(Peminatan::class); }
-    public function topik() { return $this->hasMany(TopikDosen::class); }
+    public function saranJudul() { return $this->hasMany(SaranJudul::class); }
     public function kuota() { return $this->hasMany(KuotaDosen::class); }
 }

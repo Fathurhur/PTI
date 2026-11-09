@@ -4,8 +4,8 @@ namespace App\Services;
 
 /**
  * Service TF-IDF dan Cosine Similarity sesuai SRS (MR-06 & MR-09)
- * - MR-06: Rekomendasi dosen berdasarkan kecocokan topik & abstrak (Top 5 dosen, skor 0-100%)
- * - MR-09: Deteksi kesamaan judul & topik pengajuan terhadap arsip (Ambang 0.8 / 80%)
+ * - MR-06: Rekomendasi dosen berdasarkan kecocokan judul & abstrak (Top 5 dosen, skor 0-100%)
+ * - MR-09: Deteksi kesamaan judul & abstrak pengajuan terhadap arsip (Ambang 0.8 / 80%)
  * 
  * Standar: Salton & Buckley (1988)
  */
@@ -125,7 +125,7 @@ class TfIdfService
     }
 
     /**
-     * MR-06: Rekomendasi 5 Dosen Berdasarkan Kecocokan Topik (TF-IDF Cosine)
+     * MR-06: Rekomendasi 5 Dosen Berdasarkan Kecocokan Judul & Abstrak (TF-IDF Cosine)
      * 
      * @param string $judul
      * @param string $abstrak
@@ -138,11 +138,11 @@ class TfIdfService
         $hasil = [];
 
         foreach ($daftarDosen as $dosen) {
-            // Gabungkan kata kunci keahlian dan topik yang ditawarkan dosen
+            // Gunakan kata kunci keahlian, bidang, dan saran judul dosen
             $profilTeks = ($dosen['nama'] ?? '') . ' ' . 
                           ($dosen['bidang_keahlian'] ?? '') . ' ' . 
                           (is_array($dosen['kata_kunci'] ?? null) ? implode(' ', $dosen['kata_kunci']) : ($dosen['kata_kunci'] ?? '')) . ' ' .
-                          ($dosen['topik_dosen'] ?? '');
+                          ($dosen['saran_judul'] ?? '');
 
             $skor = $this->hitungKemiripan($inputMhs, $profilTeks);
             $sisaSlot = ($dosen['sisa_slot'] ?? 0);

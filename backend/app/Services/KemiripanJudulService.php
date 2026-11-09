@@ -5,8 +5,8 @@ namespace App\Services;
 use InvalidArgumentException;
 
 /**
- * Service Pemeriksaan Kemiripan Judul & Topik
- * Sesuai Dokumen SRS MR-09 (Mendeteksi kesamaan judul dan topik pengajuan terhadap seluruh periode)
+ * Service Pemeriksaan Kemiripan Judul & Abstrak
+ * Sesuai Dokumen SRS MR-09 (Mendeteksi kesamaan judul dan abstrak pengajuan terhadap seluruh periode)
  * Submodul 9: Pemeriksaan Kemiripan Judul
  *
  * Aturan SRS yang diimplementasikan:
@@ -15,7 +15,6 @@ use InvalidArgumentException;
  * - Metode TF-IDF + cosine similarity (Salton & Buckley, 1988)
  * - Skor >= ambang (awal 0,8, dapat diubah koordinator) => pengajuan DITOLAK dengan pesan peringatan
  * - Pesan tidak menampilkan identitas mahasiswa lain; untuk arsip hanya judul dan tahun
- * - Topik rekomendasi dosen dikecualikan dari pemeriksaan (diatur FIFO pada MR-03)
  * - Pemeriksaan dijalankan SEBELUM slot dikunci (MR-04)
  * - Arsip judul diimpor koordinator melalui CSV
  * - Target kinerja: <= 5 detik untuk 5.000 judul arsip (indeks terbalik, lihat bangunIndeks())
@@ -261,13 +260,13 @@ class KemiripanJudulService
     /**
      * Periksa kemiripan judul & abstrak pengajuan baru.
      * Skor akhir tiap pembanding = maks(skor judul vs judul, skor judul+abstrak vs judul+abstrak),
-     * sehingga judul yang sama persis maupun topik yang sama dengan judul berbeda tetap terdeteksi.
+     * sehingga judul yang sama persis maupun isi yang sama dengan judul berbeda tetap terdeteksi.
      *
-     * @param array      $pengajuanBaru ['judul', 'abstrak', 'mahasiswa_id', 'asal_topik'?, 'topik_id'?, 'id'?]
+     * @param array      $pengajuanBaru ['judul', 'abstrak', 'mahasiswa_id', 'id'?]
      * @param array      $indeks        Hasil bangunIndeks()
      * @param float|null $ambang        Ambang dari pengaturan periode, default 0,8
      * @return array [
-     *   'lolos' => bool, 'status' => 'lolos'|'ditolak'|'dikecualikan',
+     *   'lolos' => bool, 'status' => 'lolos'|'ditolak',
      *   'skor_tertinggi' => float, 'skor_persen' => float, 'ambang' => float,
      *   'pesan' => string, 'pembanding' => array|null,
      *   'catatan_hasil' => array  // untuk disimpan ke tabel hasil_kemiripan
@@ -276,20 +275,6 @@ class KemiripanJudulService
     public function periksa(array $pengajuanBaru, array $indeks, ?float $ambang = null): array
     {
         $ambang = $ambang === null ? self::AMBANG_DEFAULT : $this->validasiAmbang($ambang);
-
-        // Topik rekomendasi dosen dikecualikan (SRS MR-09)
-        if ($this->dariTopikDosen($pengajuanBaru)) {
-            return [
-                'lolos'          => true,
-                'status'         => 'dikecualikan',
-                'skor_tertinggi' => 0.0,
-                'skor_persen'    => 0.0,
-                'ambang'         => $ambang,
-                'pesan'          => 'Topik rekomendasi dosen tidak diperiksa kemiripannya.',
-                'pembanding'     => null,
-                'catatan_hasil'  => [],
-            ];
-        }
 
         $judul = trim((string) ($pengajuanBaru['judul'] ?? ''));
         $abstrak = trim((string) ($pengajuanBaru['abstrak'] ?? ''));
@@ -380,18 +365,6 @@ class KemiripanJudulService
     }
 
     /**
-     * true bila pengajuan memakai topik rekomendasi dosen.
-     */
-    protected function dariTopikDosen(array $pengajuan): bool
-    {
-        if (!empty($pengajuan['topik_id'])) {
-            return true;
-        }
-        $asal = mb_strtolower((string) ($pengajuan['asal_topik'] ?? ''));
-        return str_contains($asal, 'rekomendasi') || str_contains($asal, 'dosen');
-    }
-
-    /**
      * Data pembanding yang boleh ditampilkan ke mahasiswa (UU PDP / SRS MR-09):
      * - Arsip: hanya judul dan tahun
      * - Pengajuan aktif: tanpa nama, NIM, maupun judul mahasiswa lain
@@ -418,11 +391,11 @@ class KemiripanJudulService
     protected function pesanPeringatan(array $pembanding): string
     {
         if ($pembanding['sumber'] === self::SUMBER_ARSIP) {
-            return "Judul/topik Anda mirip {$pembanding['skor']} dengan judul TA tahun {$pembanding['tahun']}: "
+            return "Judul/abstrak Anda mirip {$pembanding['skor']} dengan judul TA tahun {$pembanding['tahun']}: "
                  . "\"{$pembanding['judul']}\". Pengajuan ditolak, silakan ganti judul atau ubah fokus penelitian Anda.";
         }
 
-        return "Judul/topik Anda mirip {$pembanding['skor']} dengan pengajuan mahasiswa lain yang sedang aktif. "
+        return "Judul/abstrak Anda mirip {$pembanding['skor']} dengan pengajuan mahasiswa lain yang sedang aktif. "
              . 'Pengajuan ditolak, silakan ganti judul atau ubah fokus penelitian Anda.';
     }
 

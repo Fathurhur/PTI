@@ -3,16 +3,15 @@
 namespace App\Services;
 
 use App\Models\Antrean;
-use App\Models\ArsipTopik;
+use App\Models\ArsipJudul;
 use App\Models\Dosen;
 use App\Models\HasilKemiripan;
 use App\Models\KuotaDosen;
-use App\Models\KuotaPeminatan;
 use App\Models\Mahasiswa;
 use App\Models\Peminatan;
 use App\Models\Pengajuan;
 use App\Models\Periode;
-use App\Models\TopikDosen;
+use App\Models\SaranJudul;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use PDO;
@@ -30,7 +29,6 @@ use PDO;
  * - Pengajuan di luar periode ditolak (MR-07)
  * - Judul mirip ditolak sebelum slot dikunci (MR-09)
  * - Slot dosen + slot peminatan dikunci dalam satu transaksi SELECT ... FOR UPDATE (MR-04, MR-10)
- * - Topik rekomendasi dosen hanya untuk satu mahasiswa (FIFO), dilepas bila Ditolak/Kedaluwarsa
  * - Slot penuh: saran peran lain pada dosen yang sama, atau tawaran masuk antrean
  * - Dosen menerima/menolak (alasan >= 10 karakter); tanpa keputusan 7 x 24 jam => Kedaluwarsa
  * - Mahasiswa tidak dapat membatalkan; slot dilepas hanya saat Ditolak/Kedaluwarsa, lalu antrean dipromosikan
@@ -138,7 +136,7 @@ class PengajuanService
             ->map(fn ($p) => $p->toArray() + ['periode' => $p->periode_id])
             ->all();
 
-        $arsip = ArsipTopik::get(['id', 'judul', 'abstrak', 'tahun'])->toArray();
+        $arsip = ArsipJudul::get(['id', 'judul', 'abstrak', 'tahun'])->toArray();
 
         return $this->kemiripan->periksaLangsung($pengajuanBaru, $aktif, $arsip, (float) $periode->ambang_kemiripan);
     }
@@ -148,7 +146,7 @@ class PengajuanService
     // =========================================================
 
     /**
-     * @param array $input ['dosen_id', 'peran', 'peminatan' (P1), 'judul', 'abstrak', 'topik_id'?]
+     * @param array $input ['dosen_id', 'peran', 'peminatan' (P1), 'judul', 'abstrak', 'saran_judul_id'?]
      * @return array ['berhasil', 'kode', 'pesan', 'pengajuan'?, 'saran'?, 'tawaran_antrean'?, 'kemiripan'?] + 'status_http'
      */
     public function ajukan(Mahasiswa $mhs, array $input): array
@@ -161,14 +159,14 @@ class PengajuanService
             throw new InvalidArgumentException('Dosen tidak ditemukan.');
         }
 
-        // Topik rekomendasi dosen: judul & deskripsi ikut topik, abstrak tetap dari mahasiswa
-        $topik = null;
-        if (!empty($input['topik_id'])) {
-            $topik = TopikDosen::where('id', $input['topik_id'])->where('dosen_id', $dosen->id)->where('aktif', true)->first();
-            if ($topik === null) {
-                throw new InvalidArgumentException('Topik rekomendasi tidak ditemukan atau tidak aktif pada dosen ini.');
+        // Saran judul dosen: judul ikut saran, abstrak tetap dari mahasiswa (hanya Pembimbing 1)
+        $saran = null;
+        if ($peran === '1' && !empty($input['saran_judul_id'])) {
+            $saran = SaranJudul::where('id', $input['saran_judul_id'])->where('dosen_id', $dosen->id)->where('aktif', true)->first();
+            if ($saran === null) {
+                throw new InvalidArgumentException('Saran judul tidak ditemukan atau tidak aktif pada dosen ini.');
             }
-            $input['judul'] = $topik->judul;
+            $input['judul'] = $saran->judul;
         }
 
         $this->validasiIsi($input);
@@ -189,22 +187,23 @@ class PengajuanService
             return $this->gagal(422, 'aturan_peran', $pesan);
         }
 
-        // MR-09: kemiripan diperiksa sebelum slot dikunci
-        $cekMirip = $this->periksaKemiripan([
-            'mahasiswa_id' => $mhs->id,
-            'judul'        => $input['judul'],
-            'abstrak'      => $input['abstrak'],
-            'topik_id'     => $topik?->id,
-            'asal_topik'   => $topik ? 'Rekomendasi dosen' : 'Topik sendiri',
-        ], $periode);
+        // MR-09: kemiripan diperiksa sebelum slot dikunci. Saran judul dosen dikecualikan
+        // karena sudah dijaga aturan satu saran untuk satu mahasiswa.
+        if ($saran !== null) {
+            $cekMirip = ['lolos' => true, 'status' => 'dikecualikan', 'skor_persen' => 0.0, 'catatan_hasil' => []];
+        } else {
+            $cekMirip = $this->periksaKemiripan([
+                'mahasiswa_id' => $mhs->id,
+                'judul'        => $input['judul'],
+                'abstrak'      => $input['abstrak'],
+            ], $periode);
 
-        if (!$cekMirip['lolos']) {
-            return $this->gagal(422, 'judul_mirip', $cekMirip['pesan'], ['kemiripan' => $cekMirip]);
+            if (!$cekMirip['lolos']) {
+                return $this->gagal(422, 'judul_mirip', $cekMirip['pesan'], ['kemiripan' => $cekMirip]);
+            }
         }
 
-        $kuotaPeminatan = $this->dashboard->kuotaPeminatanPerNama($periode);
-
-        // MR-04 + MR-10: kunci slot dosen dan peminatan dalam satu transaksi
+        // MR-04: kunci slot dosen dalam satu transaksi
         $hasil = $this->peminatan->ambilSlotAtomik(
             DB::connection()->getPdo(),
             [
@@ -216,11 +215,9 @@ class PengajuanService
                 'peminatan'    => $namaPeminatan,
                 'judul'        => trim($input['judul']),
                 'abstrak'      => trim($input['abstrak']),
-                'asal_topik'   => $topik ? 'Rekomendasi dosen' : 'Topik sendiri',
-                'topik_id'     => $topik?->id,
+                'saran_judul_id' => $saran?->id,
             ],
-            $kuotaPeminatan,
-            fn (PDO $pdo, string $kunci) => $this->cekDalamKunci($pdo, $kunci, $mhs->id, $periode->id, $peran, $dosen->id, $topik?->id)
+            fn (PDO $pdo, string $kunci) => $this->cekDalamKunci($pdo, $kunci, $mhs->id, $periode->id, $peran, $dosen->id, $saran?->id)
         );
 
         if (!$hasil['berhasil']) {
@@ -264,19 +261,20 @@ class PengajuanService
     }
 
     /**
-     * Dijalankan di dalam transaksi ambilSlotAtomik: aturan MR-03 dicek ulang dan topik dosen dikunci (FIFO).
+     * Dijalankan di dalam transaksi ambilSlotAtomik: aturan MR-03 dicek ulang dan saran judul dikunci
+     * agar hanya satu mahasiswa yang bisa memakainya (yang pertama mengajukan).
      */
-    protected function cekDalamKunci(PDO $pdo, string $kunci, int $mhsId, int $periodeId, string $peran, int $dosenId, ?int $topikId): ?array
+    protected function cekDalamKunci(PDO $pdo, string $kunci, int $mhsId, int $periodeId, string $peran, int $dosenId, ?int $saranId = null): ?array
     {
-        if ($topikId !== null) {
-            $pdo->prepare('SELECT id FROM topik_dosen WHERE id = ?' . $kunci)->execute([$topikId]);
+        if ($saranId !== null) {
+            $pdo->prepare('SELECT id FROM saran_judul WHERE id = ?' . $kunci)->execute([$saranId]);
 
             $stmt = $pdo->prepare(
-                "SELECT COUNT(*) FROM pengajuan WHERE topik_id = ? AND status IN ('Menunggu','Antrean','Diterima','Ditetapkan')"
+                "SELECT COUNT(*) FROM pengajuan WHERE saran_judul_id = ? AND status IN ('Menunggu','Antrean','Diterima','Ditetapkan')"
             );
-            $stmt->execute([$topikId]);
+            $stmt->execute([$saranId]);
             if ((int) $stmt->fetchColumn() > 0) {
-                return ['kode' => 'topik_diambil', 'pesan' => 'Topik ini sudah diambil mahasiswa lain. Silakan pilih topik lain atau ajukan topik sendiri.'];
+                return ['kode' => 'saran_diambil', 'pesan' => 'Saran judul ini sudah dipakai mahasiswa lain. Silakan pilih saran lain atau tulis judul sendiri.'];
             }
         }
 
@@ -415,14 +413,10 @@ class PengajuanService
                 '2' => Pengajuan::where(['periode_id' => $periodeId, 'peran' => '2'])->whereIn('status', Pengajuan::STATUS_AKTIF)->pluck('mahasiswa_id')->all(),
             ];
 
-            $kuotaPeminatan = KuotaPeminatan::where('periode_id', $periodeId)->get()
-                ->mapWithKeys(fn ($k) => [$k->peminatan_id => ['kuota' => $k->kuota, 'terisi' => $k->terisi]])->all();
-
             $kandidat = $this->antrean->cariKandidatPromosi(
                 $dosenId,
                 $peran,
                 $daftar->map(fn ($a) => $a->toArray() + ['peran' => (string) $a->peran])->values()->all(),
-                $kuotaPeminatan,
                 $aktifPerPeran
             );
 
@@ -439,7 +433,6 @@ class PengajuanService
                 'peminatan_id' => $antre->peminatan_id,
                 'judul'        => $antre->judul,
                 'abstrak'      => $antre->abstrak,
-                'asal_topik'   => 'Antrean',
             ]);
 
             if (!$hasil['berhasil']) {
@@ -509,7 +502,7 @@ class PengajuanService
     }
 
     /**
-     * Ubah status dan kurangi jumlah terisi kuota dosen (+ kuota peminatan untuk P1) secara atomik.
+     * Ubah status dan kurangi jumlah terisi kuota dosen secara atomik.
      */
     public function lepasSlot(Pengajuan $pengajuan, array $perubahan): void
     {
@@ -520,10 +513,6 @@ class PengajuanService
                 'peran'      => $pengajuan->peran,
             ])->lockForUpdate()->first();
 
-            $kp = $pengajuan->peminatan_id
-                ? KuotaPeminatan::where(['periode_id' => $pengajuan->periode_id, 'peminatan_id' => $pengajuan->peminatan_id])->lockForUpdate()->first()
-                : null;
-
             $segar = Pengajuan::lockForUpdate()->find($pengajuan->id);
             if (!in_array($segar->status, Pengajuan::STATUS_SLOT, true)) {
                 return; // sudah dilepas proses lain
@@ -533,9 +522,6 @@ class PengajuanService
 
             if ($kd && $kd->terisi > 0) {
                 $kd->decrement('terisi');
-            }
-            if ($kp && $kp->terisi > 0) {
-                $kp->decrement('terisi');
             }
         });
 

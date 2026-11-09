@@ -257,18 +257,18 @@ class PeminatanService
      * Tabel (ERD SRS):
      * - kuota_dosen(id, periode_id, dosen_id, peran, kuota, kuota_tambahan, terisi)
      * - kuota_peminatan(id, periode_id, peminatan_id, kuota, terisi)
-     * - pengajuan(id, mahasiswa_id, peminatan_id, dosen_id, topik_id, periode_id, peran, judul,
-     *             abstrak, asal_topik, status, alasan_tolak, kedaluwarsa_at)
+     * - pengajuan(id, mahasiswa_id, peminatan_id, dosen_id, periode_id, peran, judul,
+     *             abstrak, status, alasan_tolak, kedaluwarsa_at)
      *
      * @param PDO   $pdo  Koneksi MySQL InnoDB (di Laravel: DB::connection()->getPdo())
      * @param array $data ['periode_id', 'mahasiswa_id', 'dosen_id', 'peran' ('1'|'2'),
      *                     'peminatan_id' (wajib untuk P1), 'peminatan' (nama, untuk pesan),
-     *                     'judul', 'abstrak', 'asal_topik', 'topik_id'?]
+     *                     'judul', 'abstrak', 'saran_judul_id'?]
      * @param array $kuotaPeminatanSemua Opsional, untuk menyusun saran bila peminatan penuh
      *                                   ['IoT' => ['kuota','terisi'], ...]
      * @param callable|null $cekDalamKunci Pemeriksaan tambahan yang dijalankan di dalam transaksi
      *                                     SEBELUM kuota dikunci, misalnya aturan MR-03 (satu pengajuan aktif
-     *                                     per peran, P1/P2 beda dosen) dan topik dosen FIFO.
+     *                                     per peran, P1/P2 beda dosen).
      *                                     Signature: fn(PDO $pdo, string $klausaKunci): ?array
      *                                     Kembalikan null untuk lanjut, atau ['kode','pesan','saran'?] untuk batal.
      * @return array ['berhasil' => bool, 'kode' => string, 'pesan' => string,
@@ -278,7 +278,6 @@ class PeminatanService
     public function ambilSlotAtomik(
         PDO $pdo,
         array $data,
-        array $kuotaPeminatanSemua = [],
         ?callable $cekDalamKunci = null
     ): array {
         $peran = (string) $data['peran'];
@@ -318,31 +317,7 @@ class PeminatanService
                 return $this->hasilGagal('kuota_tidak_ditemukan', 'Kuota dosen untuk periode dan peran ini belum diatur koordinator.');
             }
 
-            // 2) Kunci baris kuota peminatan (khusus Pembimbing 1)
-            $kuotaBidang = null;
-            if ($isP1) {
-                $stmt = $pdo->prepare(
-                    'SELECT id, kuota, terisi FROM kuota_peminatan
-                     WHERE periode_id = ? AND peminatan_id = ?' . $kunci
-                );
-                $stmt->execute([$data['periode_id'], $data['peminatan_id']]);
-                $kuotaBidang = $stmt->fetch(PDO::FETCH_ASSOC);
-
-                if (!$kuotaBidang) {
-                    $this->batalkanTransaksi($pdo);
-                    return $this->hasilGagal('kuota_tidak_ditemukan', 'Kuota peminatan untuk periode ini belum diatur koordinator.');
-                }
-
-                // 3) Peminatan penuh => tolak dan hanya sarankan peminatan lain (MR-10)
-                if ((int) $kuotaBidang['terisi'] >= (int) $kuotaBidang['kuota']) {
-                    $this->batalkanTransaksi($pdo);
-                    $nama = (string) ($data['peminatan'] ?? 'ini');
-                    $saran = $this->saranPeminatanLain($nama, $kuotaPeminatanSemua);
-                    return $this->hasilGagal('peminatan_penuh', $this->pesanPeminatanPenuh($nama, $saran), $saran);
-                }
-            }
-
-            // 4) Slot dosen per peran penuh => tawarkan antrean (MR-04 / MR-05)
+            // 2) Slot dosen per peran penuh => tawarkan antrean (MR-04 / MR-05)
             $kapasitas = (int) $kuotaDosen['kuota'] + (int) ($kuotaDosen['kuota_tambahan'] ?? 0);
             if ((int) $kuotaDosen['terisi'] >= $kapasitas) {
                 $this->batalkanTransaksi($pdo);
@@ -352,36 +327,30 @@ class PeminatanService
                 );
             }
 
-            // 5) Simpan pengajuan berstatus Menunggu (keputusan dosen, batas 7 x 24 jam)
+            // 3) Simpan pengajuan berstatus Menunggu (keputusan dosen, batas 7 x 24 jam)
             $kedaluwarsa = date('Y-m-d H:i:s', time() + self::BATAS_KEPUTUSAN_JAM * 3600);
             $stmt = $pdo->prepare(
                 'INSERT INTO pengajuan
-                 (mahasiswa_id, peminatan_id, dosen_id, topik_id, periode_id, peran, judul, abstrak, asal_topik, status, kedaluwarsa_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                 (mahasiswa_id, peminatan_id, dosen_id, saran_judul_id, periode_id, peran, judul, abstrak, status, kedaluwarsa_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             );
             $stmt->execute([
                 $data['mahasiswa_id'],
-                $isP1 ? $data['peminatan_id'] : null, // P2 tidak memakai kuota peminatan
+                $isP1 ? $data['peminatan_id'] : null,
                 $data['dosen_id'],
-                $data['topik_id'] ?? null,
+                $data['saran_judul_id'] ?? null,
                 $data['periode_id'],
                 $peran,
                 $data['judul'],
                 $data['abstrak'],
-                $data['asal_topik'] ?? 'Topik sendiri',
                 'Menunggu',
                 $kedaluwarsa,
             ]);
             $pengajuanId = (int) $pdo->lastInsertId();
 
-            // 6) Tambah jumlah terisi pada kedua kuota dalam transaksi yang sama
+            // 4) Tambah jumlah terisi kuota dosen dalam transaksi yang sama
             $pdo->prepare('UPDATE kuota_dosen SET terisi = terisi + 1 WHERE id = ?')
                 ->execute([$kuotaDosen['id']]);
-
-            if ($isP1) {
-                $pdo->prepare('UPDATE kuota_peminatan SET terisi = terisi + 1 WHERE id = ?')
-                    ->execute([$kuotaBidang['id']]);
-            }
 
             $this->selesaikanTransaksi($pdo);
 

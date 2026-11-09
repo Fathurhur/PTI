@@ -20,6 +20,6 @@ class Pengajuan extends Model
     public function dosen() { return $this->belongsTo(Dosen::class); }
     public function peminatan() { return $this->belongsTo(Peminatan::class); }
     public function periode() { return $this->belongsTo(Periode::class); }
-    public function topik() { return $this->belongsTo(TopikDosen::class, 'topik_id'); }
+    public function saranJudul() { return $this->belongsTo(SaranJudul::class, 'saran_judul_id'); }
     public function surat() { return $this->hasOne(SuratPenetapan::class); }
 }

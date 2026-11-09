@@ -35,8 +35,7 @@ function mountDosenList(o) {
     var q = filter.q.toLowerCase();
 
     var namaBidang = d.bidang.map(function (i) { return BIDANG[i]; }).join(' ');
-    var judulTopik = topikAktif(d).map(function (t) { return t.judul; }).join(' ');
-    var teks = (d.nama + ' ' + d.peminatan + ' ' + d.kata.join(' ') + ' ' + namaBidang + ' ' + judulTopik).toLowerCase();
+    var teks = (d.nama + ' ' + d.peminatan + ' ' + d.kata.join(' ') + ' ' + namaBidang + ' ' + (d.saran || []).map(function (t) { return t.judul; }).join(' ')).toLowerCase();
 
     if (q && !teks.includes(q)) return false;
 
@@ -119,7 +118,6 @@ function mountRekom(o) {
   if (o.contoh) {
     o.contoh.onclick = function (e) {
       e.preventDefault();
-      o.topik.value = CONTOH.topik;
       o.judul.value = CONTOH.judul;
       o.abs.value = CONTOH.abstrak;
       updateWc();
@@ -149,7 +147,7 @@ function mountRekom(o) {
       return;
     }
 
-    var r = await rekomendasiApi(o.topik.value, o.judul.value, o.abs.value);
+    var r = await rekomendasiApi(o.judul.value, o.abs.value);
     if (!r.ok) {
       o.result.innerHTML = `<div class="warn-box mt-3">${esc(r.msg)}</div>`;
       selesai();
@@ -302,7 +300,7 @@ function renderStatusCard(el) {
     var aksi = aksiStatusHTML(px, false);
     return `<div class="small text-muted fw-bold text-uppercase mb-2">${label}</div>
       <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
-        <div class="d-flex gap-2 align-items-center">${avatar(d, 'xs')}<div><b>${esc(d.nama)}</b><div class="small text-muted">${esc(px.asal)}</div></div></div>
+        <div class="d-flex gap-2 align-items-center">${avatar(d, 'xs')}<div><b>${esc(d.nama)}</b><div class="small text-muted">${'Pembimbing ' + px.peran}</div></div></div>
         <span class="sbadge sb-${px.status}">${px.status}</span></div>
       <div class="fw-bold mb-3">${esc(judulStatus(px))}</div>
       ${tlHTML(stepsFor(px))}
@@ -384,7 +382,7 @@ function kartuPengajuan(p) {
         <div class="flex-grow-1"><b>${esc(d.nama)}</b><div class="small text-muted">${esc(namaBidang)}</div></div>
         <button class="btn btn-ghost btn-sm" data-detail="${d.id}">Profil</button></div>
       ${blokJudul}
-      <div class="d-flex gap-4 small flex-wrap"><div><span class="text-muted">Asal topik</span><br><b>${esc(p.asal)}</b></div>${p.peminatan ? `<div><span class="text-muted">Peminatan</span><br><b>${esc(p.peminatan)}</b></div>` : ''}<div><span class="text-muted">Dikirim</span><br><b>${fmtDate(p.tgl)}</b></div><div><span class="text-muted">Periode</span><br><b>${esc(PERIODE.nama)}</b></div>${tglTetap}</div>
+      <div class="d-flex gap-4 small flex-wrap">${p.peminatan ? `<div><span class="text-muted">Peminatan</span><br><b>${esc(p.peminatan)}</b></div>` : ''}<div><span class="text-muted">Dikirim</span><br><b>${fmtDate(p.tgl)}</b></div><div><span class="text-muted">Periode</span><br><b>${esc(PERIODE.nama)}</b></div>${tglTetap}</div>
       <hr>${bawah}
     </div></div>
     <div class="col-lg-5">

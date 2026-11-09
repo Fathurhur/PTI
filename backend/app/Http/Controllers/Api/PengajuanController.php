@@ -79,9 +79,9 @@ class PengajuanController extends Controller
             'dosen_id'  => ['required', 'integer'],
             'peran'     => ['required', Rule::in(['1', '2'])],
             'peminatan' => ['nullable', Rule::in(['IoT', 'AI', 'Cyber'])],
-            'judul'     => ['required_without:topik_id', 'nullable', 'string', 'max:200'],
+            'judul'     => ['required_without:saran_judul_id', 'nullable', 'string', 'max:200'],
             'abstrak'   => ['required', 'string'],
-            'topik_id'  => ['nullable', 'integer'],
+            'saran_judul_id' => ['nullable', 'integer'],
         ]);
 
         $hasil = $this->pengajuan->ajukan($request->user()->mahasiswa, $data);
@@ -125,7 +125,7 @@ class PengajuanController extends Controller
             ? KuotaDosen::where(['periode_id' => $periode->id, 'peran' => $peran])->get()->keyBy('dosen_id')
             : collect();
 
-        $daftarDosen = Dosen::with(['user:id,nama', 'peminatan', 'topik' => fn ($q) => $q->where('aktif', true)])
+        $daftarDosen = Dosen::with(['user:id,nama', 'peminatan', 'saranJudul' => fn ($q) => $q->where('aktif', true)])
             ->where('menerima_bimbingan', true)
             ->get()
             ->map(fn ($d) => [
@@ -135,7 +135,7 @@ class PengajuanController extends Controller
                 'peminatan_utama' => $d->peminatan->nama,
                 'bidang_keahlian' => implode(', ', $d->bidang_keahlian),
                 'kata_kunci'      => $d->kata_kunci,
-                'topik_dosen'     => $d->topik->map(fn ($t) => $t->judul . ' ' . $t->deskripsi)->implode(' '),
+                'saran_judul'     => $d->saranJudul->map(fn ($t) => $t->judul . ' ' . $t->deskripsi)->implode(' '),
                 'sisa_slot'       => isset($kuota[$d->id]) ? $kuota[$d->id]->sisa() : 0,
             ])->all();
 
@@ -211,16 +211,15 @@ class PengajuanController extends Controller
             'id'             => $p->id,
             'mahasiswa_id'   => $p->mahasiswa_id,
             'dosen_id'       => $p->dosen_id,
+            'saran_judul_id' => $p->saran_judul_id,
             'mahasiswa'      => $p->mahasiswa?->user?->nama,
             'nim'            => $p->mahasiswa?->nim,
             'dosen'          => $p->dosen?->user?->nama,
-            'topik_id'       => $p->topik_id,
             'peran'          => $p->peran,
             'peminatan'      => $p->peminatan?->nama,
             'periode'        => $p->periode?->nama,
             'judul'          => $p->judul,
             'abstrak'        => $p->abstrak,
-            'asal_topik'     => $p->asal_topik,
             'status'         => $p->status,
             'alasan_tolak'   => $p->alasan_tolak,
             'kedaluwarsa_at' => $p->kedaluwarsa_at?->toIso8601String(),

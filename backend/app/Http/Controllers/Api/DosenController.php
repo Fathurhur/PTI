@@ -7,19 +7,19 @@ use App\Models\KuotaDosen;
 use App\Models\Peminatan;
 use App\Models\Pengajuan;
 use App\Models\Periode;
-use App\Models\TopikDosen;
+use App\Models\SaranJudul;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 /**
- * MR-02: dosen mengelola profil, peminatan, kata kunci keahlian, topik rekomendasi,
+ * MR-02: dosen mengelola profil, peminatan, kata kunci keahlian,
  * dan status menerima/tidak menerima bimbingan. Juga daftar bimbingan + sisa kuota.
  */
 class DosenController extends Controller
 {
     public function profil(Request $request)
     {
-        $dosen = $request->user()->dosen->load(['user:id,nama,email', 'peminatan', 'topik']);
+        $dosen = $request->user()->dosen->load(['user:id,nama,email', 'peminatan', 'saranJudul']);
 
         return response()->json([
             'nama'            => $dosen->user->nama,
@@ -29,7 +29,7 @@ class DosenController extends Controller
             'bidang_keahlian' => $dosen->bidang_keahlian,
             'kata_kunci'      => $dosen->kata_kunci,
             'menerima'        => $dosen->menerima_bimbingan,
-            'topik'           => $dosen->topik,
+            'saran_judul'     => $dosen->saranJudul,
         ]);
     }
 
@@ -68,35 +68,35 @@ class DosenController extends Controller
     }
 
     /**
-     * Topik rekomendasi: judul maks. 200, deskripsi maks. 1.000 karakter.
+     * Saran judul: judul maks. 200, deskripsi maks. 1.000 karakter.
      */
-    public function simpanTopik(Request $request, ?TopikDosen $topik = null)
+    public function simpanSaranJudul(Request $request, ?SaranJudul $saran = null)
     {
         $data = $request->validate([
-            'judul'     => [$topik ? 'sometimes' : 'required', 'string', 'max:200'],
+            'judul'     => [$saran ? 'sometimes' : 'required', 'string', 'max:200'],
             'deskripsi' => ['nullable', 'string', 'max:1000'],
             'aktif'     => ['sometimes', 'boolean'],
         ]);
 
         $dosenId = $request->user()->dosen->id;
 
-        if ($topik) {
-            abort_unless($topik->dosen_id === $dosenId, 403, 'Topik ini bukan milik Anda.');
-            $topik->update($data);
+        if ($saran) {
+            abort_unless($saran->dosen_id === $dosenId, 403, 'Saran judul ini bukan milik Anda.');
+            $saran->update($data);
         } else {
-            $topik = TopikDosen::create($data + ['dosen_id' => $dosenId]);
+            $saran = SaranJudul::create($data + ['dosen_id' => $dosenId]);
         }
 
-        return response()->json(['pesan' => 'Topik disimpan.', 'topik' => $topik], 201);
+        return response()->json(['pesan' => 'Saran judul disimpan.', 'saran_judul' => $saran], 201);
     }
 
-    /** Menonaktifkan topik (tidak dihapus agar riwayat pengajuan tetap utuh). */
-    public function nonaktifkanTopik(Request $request, TopikDosen $topik)
+    /** Menonaktifkan saran judul (tidak dihapus agar riwayat pengajuan tetap utuh). */
+    public function nonaktifkanSaranJudul(Request $request, SaranJudul $saran)
     {
-        abort_unless($topik->dosen_id === $request->user()->dosen->id, 403, 'Topik ini bukan milik Anda.');
-        $topik->update(['aktif' => false]);
+        abort_unless($saran->dosen_id === $request->user()->dosen->id, 403, 'Saran judul ini bukan milik Anda.');
+        $saran->update(['aktif' => false]);
 
-        return response()->json(['pesan' => 'Topik dinonaktifkan.']);
+        return response()->json(['pesan' => 'Saran judul dinonaktifkan.']);
     }
 
     /** Daftar bimbingan dan sisa kuota per peran pada periode aktif. */

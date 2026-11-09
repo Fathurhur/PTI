@@ -53,9 +53,9 @@ Route::post('/pengajuan/{pengajuan}/putuskan', [PengajuanController::class, 'put
 Route::prefix('dosen-saya')->group(function () {
     Route::get('/profil', [DosenController::class, 'profil'])->middleware('izin:profil_dosen.kelola');          // MR-02
     Route::put('/profil', [DosenController::class, 'ubahProfil'])->middleware('izin:profil_dosen.kelola');
-    Route::post('/topik', [DosenController::class, 'simpanTopik'])->middleware('izin:topik_dosen.kelola');
-    Route::put('/topik/{topik}', [DosenController::class, 'simpanTopik'])->middleware('izin:topik_dosen.kelola');
-    Route::delete('/topik/{topik}', [DosenController::class, 'nonaktifkanTopik'])->middleware('izin:topik_dosen.kelola');
+    Route::post('/saran-judul', [DosenController::class, 'simpanSaranJudul'])->middleware('izin:saran_judul.kelola');
+    Route::put('/saran-judul/{saran}', [DosenController::class, 'simpanSaranJudul'])->middleware('izin:saran_judul.kelola');
+    Route::delete('/saran-judul/{saran}', [DosenController::class, 'nonaktifkanSaranJudul'])->middleware('izin:saran_judul.kelola');
     Route::get('/bimbingan', [DosenController::class, 'bimbingan'])->middleware('izin:bimbingan.lihat');
 });
 
@@ -65,13 +65,11 @@ Route::prefix('koordinator')->group(function () {
     Route::post('/periode', [KoordinatorController::class, 'bukaPeriode'])->middleware('izin:periode.kelola');
     Route::put('/periode/{periode}', [KoordinatorController::class, 'ubahPeriode'])->middleware('izin:periode.kelola');
     Route::post('/periode/{periode}/tutup', [KoordinatorController::class, 'tutupPeriode'])->middleware('izin:periode.kelola');
-    Route::put('/periode/{periode}/ambang', [KoordinatorController::class, 'ubahAmbang'])->middleware('izin:ambang_kemiripan.atur');
 
     Route::post('/dosen', [KoordinatorController::class, 'tambahDosen'])->middleware('izin:data_pengguna.impor');
     Route::put('/dosen/{dosen}/menerima', [KoordinatorController::class, 'ubahMenerima'])->middleware('izin:kuota_dosen.kelola');
     Route::put('/dosen/{dosen}/kuota', [KoordinatorController::class, 'ubahKuotaDosen'])->middleware('izin:kuota_dosen.kelola');
     Route::post('/dosen/{dosen}/slot-tambahan', [KoordinatorController::class, 'slotTambahan'])->middleware('izin:slot_tambahan.beri');
-    Route::put('/kuota-peminatan', [KoordinatorController::class, 'ubahKuotaPeminatan'])->middleware('izin:kuota_peminatan.kelola');
 
     Route::post('/pengajuan/{pengajuan}/pindahkan', [KoordinatorController::class, 'pindahkan'])->middleware('izin:pengajuan.pindahkan');
     Route::post('/pengajuan/{pengajuan}/sahkan', [KoordinatorController::class, 'sahkan'])->middleware('izin:penetapan.sahkan');

@@ -16,18 +16,15 @@
     <div class="row g-3 mb-4" id="stats"></div>
     <div class="card-x pad mb-4"><div class="d-flex justify-content-between flex-wrap gap-2 mb-2"><b>Pemerataan beban per dosen</b>
       <span class="small text-muted"><span style="color:var(--green)">●</span> aman &nbsp;<span style="color:#E3A400">●</span> ≥75% &nbsp;<span style="color:var(--red)">●</span> penuh</span></div><div id="bars"></div></div>
-    <div class="card-x pad"><b class="d-block mb-2">Sebaran slot per peminatan (Pembimbing 1)</b><div id="rekapPeminatan"></div></div>
   </section>
 
   <section class="view" id="periode">
     <div class="row g-4">
-      <div class="col-lg-4">
+      <div class="col-12">
         <h2 class="sec-title"><i class="bi bi-calendar-range"></i>Periode</h2>
         <div class="card-x pad" id="periodeCard"></div>
-        <h2 class="sec-title mt-4"><i class="bi bi-diagram-3"></i>Kuota peminatan &amp; kemiripan</h2>
-        <div class="card-x pad" id="peminatanCard"></div>
       </div>
-      <div class="col-lg-8"><div class="d-flex align-items-center flex-wrap gap-2 mb-2"><h2 class="sec-title mb-0"><i class="bi bi-sliders"></i>Kuota &amp; status dosen</h2>
+      <div class="col-12"><div class="d-flex align-items-center flex-wrap gap-2 mb-2"><h2 class="sec-title mb-0"><i class="bi bi-sliders"></i>Kuota &amp; status dosen</h2>
           <div class="ms-auto d-flex gap-2 flex-wrap"><button class="btn btn-ghost btn-sm" onclick="setMenerimaSemua(true)"><i class="bi bi-toggle-on me-1"></i>Terima semua</button>
             <button class="btn btn-ghost btn-sm text-danger" onclick="setMenerimaSemua(false)"><i class="bi bi-toggle-off me-1"></i>Nonaktifkan semua</button></div></div>
         <div class="card-x"><div style="overflow-x:auto"><table class="table-x"><thead><tr><th>Dosen</th><th>Kuota Pembimbing 1 (0–20)</th><th>Kuota Pembimbing 2 (0–20)</th><th>Menerima bimbingan</th><th></th></tr></thead><tbody id="kuotaBody"></tbody></table></div>

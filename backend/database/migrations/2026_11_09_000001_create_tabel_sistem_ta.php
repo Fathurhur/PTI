@@ -36,15 +36,6 @@ return new class extends Migration
             $table->boolean('menerima_bimbingan')->default(true);
         });
 
-        Schema::create('topik_dosen', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('dosen_id')->constrained('dosen')->cascadeOnDelete();
-            $table->string('judul', 200);
-            $table->string('deskripsi', 1000)->nullable();
-            $table->boolean('aktif')->default(true);
-            $table->timestamps();
-        });
-
         // MR-07: periode, kuota otomatis, ambang kemiripan (MR-09)
         Schema::create('periode', function (Blueprint $table) {
             $table->id();
@@ -72,28 +63,16 @@ return new class extends Migration
             $table->unique(['periode_id', 'dosen_id', 'peran']);
         });
 
-        // MR-10: kuota per peminatan per periode
-        Schema::create('kuota_peminatan', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('periode_id')->constrained('periode')->cascadeOnDelete();
-            $table->foreignId('peminatan_id')->constrained('peminatan');
-            $table->unsignedSmallInteger('kuota')->default(0);
-            $table->unsignedSmallInteger('terisi')->default(0);
-            $table->unique(['periode_id', 'peminatan_id']);
-        });
-
         // MR-03: pengajuan pembimbing
         Schema::create('pengajuan', function (Blueprint $table) {
             $table->id();
             $table->foreignId('mahasiswa_id')->constrained('mahasiswa')->cascadeOnDelete();
             $table->foreignId('peminatan_id')->nullable()->constrained('peminatan'); // null untuk Pembimbing 2
             $table->foreignId('dosen_id')->constrained('dosen');
-            $table->foreignId('topik_id')->nullable()->constrained('topik_dosen')->nullOnDelete();
             $table->foreignId('periode_id')->constrained('periode');
             $table->enum('peran', ['1', '2']);
             $table->string('judul', 200);
             $table->text('abstrak');
-            $table->string('asal_topik', 50)->default('Topik sendiri');
             $table->enum('status', ['Menunggu', 'Antrean', 'Diterima', 'Ditolak', 'Kedaluwarsa', 'Ditetapkan'])->default('Menunggu')->index();
             $table->string('alasan_tolak', 500)->nullable();
             $table->dateTime('kedaluwarsa_at')->nullable()->index();
@@ -133,7 +112,7 @@ return new class extends Migration
         });
 
         // MR-09: arsip judul TA angkatan sebelumnya (impor CSV)
-        Schema::create('arsip_topik', function (Blueprint $table) {
+        Schema::create('arsip_judul', function (Blueprint $table) {
             $table->id();
             $table->string('judul', 200);
             $table->text('abstrak')->nullable();
@@ -144,7 +123,7 @@ return new class extends Migration
         Schema::create('hasil_kemiripan', function (Blueprint $table) {
             $table->id();
             $table->foreignId('pengajuan_id')->constrained('pengajuan')->cascadeOnDelete();
-            $table->foreignId('arsip_id')->nullable()->constrained('arsip_topik')->nullOnDelete();
+            $table->foreignId('arsip_id')->nullable()->constrained('arsip_judul')->nullOnDelete();
             $table->foreignId('pembanding_pengajuan_id')->nullable()->constrained('pengajuan')->nullOnDelete();
             $table->decimal('skor', 5, 4);
             $table->enum('hasil', ['lolos', 'ditolak']);
@@ -183,9 +162,9 @@ return new class extends Migration
     public function down(): void
     {
         foreach ([
-            'log_aktivitas', 'surat_penetapan', 'riwayat_pemindahan', 'hasil_kemiripan', 'arsip_topik',
-            'notifikasi', 'antrean', 'pengajuan', 'kuota_peminatan', 'kuota_dosen', 'periode',
-            'topik_dosen', 'dosen', 'mahasiswa', 'peminatan',
+            'log_aktivitas', 'surat_penetapan', 'riwayat_pemindahan', 'hasil_kemiripan', 'arsip_judul',
+            'notifikasi', 'antrean', 'pengajuan', 'kuota_dosen', 'periode',
+            'dosen', 'mahasiswa', 'peminatan',
         ] as $tabel) {
             Schema::dropIfExists($tabel);
         }

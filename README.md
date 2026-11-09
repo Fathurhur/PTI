@@ -29,12 +29,12 @@ Untuk mengembalikan data ke kondisi awal, jalankan `php artisan migrate:fresh --
 | Peran | Halaman | Fitur |
 |---|---|---|
 | Mahasiswa | `dashboard.html`, `cari.html`, `pengajuan.html`, `riwayat.html` | Slot dosen real-time (polling 5 detik), rekomendasi dosen TF-IDF, cek kemiripan judul langsung saat mengetik, ajukan Pembimbing 1 dan 2, masuk antrean bila slot penuh, pantau status, unduh surat penetapan |
-| Dosen | `dosen.html` | Terima atau tolak pengajuan (alasan minimal 10 karakter), lihat bimbingan dan sisa kuota, kelola profil, peminatan, kata kunci, topik rekomendasi, dan status menerima |
-| Koordinator | `koordinator.html` | Rekap beban dosen dan peminatan, ekspor CSV, tambah dosen, buka/tutup/ubah periode, kuota dosen per peran, slot tambahan, kuota peminatan, ambang kemiripan, sahkan penetapan dan terbitkan surat PDF, pindahkan pengajuan, impor CSV pengguna dan arsip judul |
+| Dosen | `dosen.html` | Terima atau tolak pengajuan (alasan minimal 10 karakter), lihat bimbingan dan sisa kuota, kelola profil, peminatan, kata kunci, saran judul, dan status menerima |
+| Koordinator | `koordinator.html` | Rekap beban dosen, ekspor CSV, tambah dosen, buka/tutup/ubah periode, kuota dosen per peran, slot tambahan, sahkan penetapan dan terbitkan surat PDF, pindahkan pengajuan, impor CSV pengguna dan arsip judul |
 
 ## Alur utama (sesuai SRS)
 
-1. **Mahasiswa** mengajukan Pembimbing 1. Peminatan mengikuti peminatan utama dosen. Judul diperiksa kemiripannya, lalu slot dosen dan slot peminatan dikunci dalam satu transaksi. Status menjadi **Menunggu**.
+1. **Mahasiswa** mengajukan Pembimbing 1. Peminatan mengikuti peminatan utama dosen. Judul diperiksa kemiripannya, lalu slot dosen dikunci dalam satu transaksi. Status menjadi **Menunggu**.
 2. Bila slot dosen penuh, mahasiswa bisa **masuk antrean**. Saat slot terbuka (pengajuan ditolak, kedaluwarsa, kuota dinaikkan, atau ada slot tambahan), mahasiswa pertama di antrean dipromosikan otomatis.
 3. **Dosen** menerima (status **Diterima**) atau menolak dengan alasan. Pengajuan tanpa keputusan selama 7 × 24 jam menjadi **Kedaluwarsa** dan slotnya dilepas.
 4. **Koordinator** mengesahkan pengajuan yang sudah Diterima. Statusnya menjadi **Ditetapkan** dan sistem menerbitkan surat `SP-TA/<periode>/<urut>` dalam format PDF.

@@ -65,7 +65,7 @@ Tanpa terminal 3, kedaluwarsa tetap diproses paling lama sekali per menit setiap
 | Dosen | NIDN, misalnya `0412038801` (Dr. Khodijah, IoT), `0410118804` (Yohanes, AI), `0420068503` (Philip, Cyber) |
 | Mahasiswa | NIM, misalnya `1202230013` (Muhammad Fathurrohman, belum punya pembimbing) |
 
-Kondisi data contoh: kuota P1 Dr. Helmy dibuat penuh untuk demo antrean, Mustafa Kamal berstatus tidak menerima, dan ada 1 pengajuan Menunggu dengan topik rekomendasi dosen.
+Kondisi data contoh: kuota P1 Dr. Helmy dibuat penuh untuk demo antrean, Mustafa Kamal berstatus tidak menerima, dan ada 1 pengajuan Menunggu.
 
 ## Pengujian
 
@@ -98,7 +98,7 @@ await fetch('/api/login', {
 |---|---|---|
 | `POST /api/login`, `POST /api/logout`, `GET /api/saya` | semua | 08 |
 | `GET /api/dashboard?bidang=&peminatan=&status=` (polling 5 detik) | semua | 01, 10 |
-| `GET /api/dosen/{id}` (profil + topik) | semua | 02 |
+| `GET /api/dosen/{id}` (profil) | semua | 02 |
 | `GET /api/notifikasi`, `POST /api/notifikasi/{id}/baca`, `POST /api/notifikasi/baca-semua` | semua | 05 |
 | `GET /api/pengajuan`, `GET /api/pengajuan/{id}` (disaring sesuai peran) | semua | 03, 08 |
 | `GET /api/pengajuan/{id}/surat` (PDF) | pemilik, dosen, koordinator | 07 |
@@ -107,10 +107,10 @@ await fetch('/api/login', {
 | `POST /api/pengajuan` | mahasiswa | 03, 04, 09, 10 |
 | `POST /api/antrean`, `GET /api/antrean` | mahasiswa | 05 |
 | `POST /api/pengajuan/{id}/putuskan` (`terima`/`tolak` + `alasan`) | dosen | 03 |
-| `GET/PUT /api/dosen-saya/profil`, `POST/PUT/DELETE /api/dosen-saya/topik/{id}`, `GET /api/dosen-saya/bimbingan` | dosen | 02 |
-| `GET/POST /api/koordinator/periode`, `PUT .../periode/{id}` (tanggal), `POST .../periode/{id}/tutup`, `PUT .../periode/{id}/ambang` | koordinator | 07, 09 |
+| `GET/PUT /api/dosen-saya/profil`, `POST/PUT/DELETE /api/dosen-saya/saran-judul/{id}`, `GET /api/dosen-saya/bimbingan` | dosen | 02 |
+| `GET/POST /api/koordinator/periode`, `PUT .../periode/{id}` (tanggal), `POST .../periode/{id}/tutup` | koordinator | 07, 09 |
 | `POST /api/koordinator/dosen` (tambah dosen), `PUT .../dosen/{id}/menerima` | koordinator | 07 |
-| `PUT /api/koordinator/dosen/{id}/kuota`, `POST .../dosen/{id}/slot-tambahan`, `PUT .../kuota-peminatan` | koordinator | 07, 10 |
+| `PUT /api/koordinator/dosen/{id}/kuota`, `POST .../dosen/{id}/slot-tambahan` | koordinator | 07, 10 |
 | `POST /api/koordinator/pengajuan/{id}/pindahkan`, `POST .../pengajuan/{id}/sahkan` | koordinator | 07 |
 | `GET /api/koordinator/rekap`, `GET .../rekap.csv`, `GET .../log` | koordinator | 07 |
 | `POST /api/koordinator/impor/arsip` (CSV: `judul,tahun,abstrak,sumber`) | koordinator | 09 |
@@ -123,7 +123,7 @@ Lihat semua route dengan `php artisan route:list --path=api`.
 | MR | File |
 |---|---|
 | 01 Dashboard real-time | `app/Services/DashboardService.php`, `UmumController@dashboard` |
-| 02 Profil & topik dosen | `Api/DosenController.php` |
+| 02 Profil dosen | `Api/DosenController.php` |
 | 03 Pengajuan & keputusan | `app/Services/PengajuanService.php`, `Api/PengajuanController.php` |
 | 04 Cegah rebutan slot | `PeminatanService::ambilSlotAtomik()` (SELECT ... FOR UPDATE) |
 | 05 Antrean & notifikasi | `AntreanService.php`, `PengajuanService::promosikanAntrean()`, `NotifikasiService.php`, `Jobs/KirimEmailNotifikasi.php` |

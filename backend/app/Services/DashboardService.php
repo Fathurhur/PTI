@@ -5,9 +5,9 @@ namespace App\Services;
 use App\Models\Antrean;
 use App\Models\Dosen;
 use App\Models\KuotaDosen;
-use App\Models\KuotaPeminatan;
 use App\Models\Pengajuan;
 use App\Models\Periode;
+use App\Models\SaranJudul;
 
 /**
  * Service Dashboard Slot Real-time
@@ -42,12 +42,11 @@ class DashboardService
         $dosenList = Dosen::with([
             'user:id,nama,email',
             'peminatan',
-            'topik' => fn ($q) => $q->where('aktif', true)->orderBy('id'),
+            'saranJudul' => fn ($q) => $q->where('aktif', true)->orderBy('id'),
         ])->get();
 
-        // Topik rekomendasi yang sedang dipakai pengajuan aktif tidak bisa dipilih mahasiswa lain (MR-03)
-        $topikDiambil = Pengajuan::whereIn('status', Pengajuan::STATUS_AKTIF)
-            ->whereNotNull('topik_id')->pluck('topik_id')->flip();
+        // Saran judul yang sedang dipakai pengajuan aktif tidak bisa dipakai mahasiswa lain
+        $saranTerpakai = array_flip(SaranJudul::idTerpakai());
 
         // Tanpa periode aktif, dosen tetap ditampilkan dengan kuota 0
         $kuota = $periode
@@ -88,11 +87,11 @@ class DashboardService
                 'status'          => $status,
                 'pembimbing_1'    => $p1 + ['antrean' => (int) ($antrean[$d->id]['1'] ?? 0)],
                 'pembimbing_2'    => $p2 + ['antrean' => (int) ($antrean[$d->id]['2'] ?? 0)],
-                'topik'           => $d->topik->map(fn ($t) => [
+                'saran_judul'     => $d->saranJudul->map(fn ($t) => [
                     'id'        => $t->id,
                     'judul'     => $t->judul,
                     'deskripsi' => $t->deskripsi,
-                    'tersedia'  => !isset($topikDiambil[$t->id]),
+                    'tersedia'  => !isset($saranTerpakai[$t->id]),
                 ])->values()->all(),
             ];
         }
@@ -111,27 +110,9 @@ class DashboardService
                 'jumlah_mhs_proposal' => (int) $periode->jumlah_mhs_proposal,
             ] : null,
             'dosen'         => array_values($hasil),
-            'peminatan'     => $periode ? $this->peminatan->ringkasanSlot($this->kuotaPeminatanPerNama($periode)) : [],
             'interval_polling_detik' => 5,
             'diperbarui_at' => now()->toIso8601String(),
         ];
-    }
-
-    /**
-     * Kuota peminatan dalam bentuk ['IoT' => ['kuota','terisi','id'], ...] untuk PeminatanService.
-     */
-    public function kuotaPeminatanPerNama(Periode $periode): array
-    {
-        return KuotaPeminatan::with('peminatan')
-            ->where('periode_id', $periode->id)
-            ->get()
-            ->mapWithKeys(fn ($k) => [$k->peminatan->nama => [
-                'id'           => $k->id,
-                'peminatan_id' => $k->peminatan_id,
-                'kuota'        => (int) $k->kuota,
-                'terisi'       => (int) $k->terisi,
-            ]])
-            ->all();
     }
 
     protected function ringkasPeran(?KuotaDosen $k): array

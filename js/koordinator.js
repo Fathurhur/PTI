@@ -9,7 +9,6 @@ function gambarSemua() {
   drawRekap();
   drawKuota();
   drawPeriode();
-  drawPeminatan();
   drawSah();
 }
 
@@ -64,13 +63,6 @@ function drawRekap() {
   $('#bars').innerHTML = `<div style="overflow-x:auto"><table class="table-x rekap-tabel"><thead><tr>
     <th>Dosen</th><th>Pembimbing 1 (terisi/kuota)</th><th>Pembimbing 2 (terisi/kuota)</th><th class="text-end">Total</th></tr></thead><tbody>${baris}</tbody></table></div>`;
 
-  // MR-10: sebaran slot per peminatan
-  var pem = DB.data.peminatan;
-  $('#rekapPeminatan').innerHTML = pem.length == 0
-    ? '<div class="small text-muted">Belum ada periode aktif.</div>'
-    : `<div style="overflow-x:auto"><table class="table-x rekap-tabel"><thead><tr><th>Peminatan</th><th>Terisi/kuota</th></tr></thead><tbody>${pem.map(function (p) {
-      return `<tr><td class="fw-semibold">${esc(p.peminatan)}</td>${selBeban(p.terisi, p.kuota, String(p.kuota))}</tr>`;
-    }).join('')}</tbody></table></div>`;
 }
 
 // download rekap CSV dari server (MR-07)
@@ -80,7 +72,7 @@ function exportCSV() {
     return;
   }
   window.location.href = API_BASE + '/koordinator/rekap.csv';
-  toast('Rekap beban dosen dan peminatan diekspor ke CSV.', 'success');
+  toast('Rekap beban dosen diekspor ke CSV.', 'success');
 }
 
 
@@ -347,7 +339,7 @@ function drawPeriode() {
         <label class="form-label fw-bold">Tanggal mulai</label><input type="date" class="form-control mb-3" id="bMulai" value="${tglLokal()}">
         <label class="form-label fw-bold">Tanggal selesai</label><input type="date" class="form-control mb-3" id="bSelesai">
         <label class="form-label fw-bold">Jumlah mahasiswa Penulisan Proposal</label><input type="number" min="0" class="form-control mb-2" id="bJumlah" placeholder="Contoh: 42">
-        <div class="small text-muted mb-3">Kuota Pembimbing 1 dan 2 tiap dosen dihitung otomatis: jumlah mahasiswa ÷ dosen aktif (dibulatkan ke atas). Kuota peminatan dibagi rata.</div>
+        <div class="small text-muted mb-3">Kuota Pembimbing 1 dan 2 tiap dosen dihitung otomatis: jumlah mahasiswa ÷ dosen aktif (dibulatkan ke atas).</div>
         <button class="btn btn-red w-100" onclick="bukaPeriode(this)"><i class="bi bi-unlock me-1"></i>Buka periode</button>`;
     }
   }
@@ -401,75 +393,6 @@ async function bukaPeriode(btn) {
   };
   tombolSibuk(btn, true, 'Membuka...');
   var r = await Api.post('/koordinator/periode', body);
-  tombolSibuk(btn, false);
-  if (!r.ok) {
-    toast(pesanError(r), 'danger');
-    return;
-  }
-  await DB.segarkan();
-  toast(r.data.pesan, 'success');
-}
-
-
-// ===== KUOTA PEMINATAN (MR-10) & AMBANG KEMIRIPAN (MR-09) =====
-var kunciPeminatan = null;
-
-function drawPeminatan() {
-  var pr = DB.data.periode;
-  var kunci = pr ? 'p' + pr.id : 'kosong';
-
-  if (kunci !== kunciPeminatan) {
-    kunciPeminatan = kunci;
-    if (!pr) {
-      $('#peminatanCard').innerHTML = '<div class="small text-muted">Buka periode terlebih dahulu.</div>';
-      return;
-    }
-    $('#peminatanCard').innerHTML = DB.data.peminatan.map(function (p) {
-      return `<div class="d-flex align-items-center gap-2 mb-2"><b style="width:56px">${esc(p.peminatan)}</b>
-        <input type="number" min="0" class="form-control form-control-sm" style="width:90px" data-pem="${esc(p.peminatan)}" value="${p.kuota}">
-        <span class="small text-muted" data-pem-info="${esc(p.peminatan)}"></span></div>`;
-    }).join('') + `
-      <button class="btn btn-ghost btn-sm w-100 mb-3" onclick="simpanKuotaPeminatan(this)"><i class="bi bi-save me-1"></i>Simpan kuota peminatan</button>
-      <label class="form-label fw-bold">Ambang kemiripan judul (%)</label>
-      <div class="input-group mb-1"><input type="number" min="50" max="100" class="form-control" id="ambang" value="${Math.round(pr.ambang * 100)}"><button class="btn btn-ghost" onclick="simpanAmbang(this)">Simpan</button></div>
-      <div class="small text-muted">Judul dengan kemiripan sama atau di atas ambang ditolak sistem (awal 80%).</div>`;
-  }
-
-  if (pr) {
-    DB.data.peminatan.forEach(function (p) {
-      var el = $('[data-pem-info="' + p.peminatan + '"]');
-      if (el) el.innerHTML = 'Terisi <b>' + p.terisi + '</b> · Sisa <b>' + p.sisa + '</b>';
-    });
-  }
-}
-
-async function simpanKuotaPeminatan(btn) {
-  var ubah = $$('[data-pem]').filter(function (input) {
-    var p = DB.data.peminatan.find(function (x) { return x.peminatan === input.dataset.pem; });
-    return p && Number(input.value) !== p.kuota;
-  });
-  if (ubah.length == 0) {
-    toast('Tidak ada perubahan kuota peminatan.', 'dark');
-    return;
-  }
-
-  tombolSibuk(btn, true, 'Menyimpan...');
-  var gagal = [];
-  for (var i = 0; i < ubah.length; i++) {
-    var r = await Api.put('/koordinator/kuota-peminatan', { peminatan: ubah[i].dataset.pem, kuota: Number(ubah[i].value) });
-    if (!r.ok) gagal.push(pesanError(r));
-  }
-  tombolSibuk(btn, false);
-
-  kunciPeminatan = null; // gambar ulang isian dengan nilai dari server
-  await DB.segarkan();
-  if (gagal.length) toast(gagal.join(' '), 'danger');
-  else toast('Kuota peminatan disimpan.', 'success');
-}
-
-async function simpanAmbang(btn) {
-  tombolSibuk(btn, true, '...');
-  var r = await Api.put('/koordinator/periode/' + DB.data.periode.id + '/ambang', { ambang: Number($('#ambang').value) });
   tombolSibuk(btn, false);
   if (!r.ok) {
     toast(pesanError(r), 'danger');
