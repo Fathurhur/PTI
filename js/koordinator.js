@@ -1,15 +1,22 @@
 // koordinator.js
-// script buat halaman koordinator TA / kaprodi
-// data kuota, periode, sama penetapan diambil dari DB (app.js)
+// script buat halaman koordinator TA / kaprodi (MR-07, MR-09, MR-10)
+// semua perubahan dikirim ke backend, lalu data dimuat ulang
 
-// kuota yg udah diketik tapi belum disimpan (key nya id dosen)
-// biar ga ketiban pas halaman digambar ulang
+// kuota yg udah diketik tapi belum disimpan (key: idDosen-peran), biar ga ketiban pas polling
 var draftKuota = {};
+
+function gambarSemua() {
+  drawRekap();
+  drawKuota();
+  drawPeriode();
+  drawPeminatan();
+  drawSah();
+}
 
 
 // ===== REKAP BEBAN =====
 // satu sel beban: angka terisi/kuota, sisa slot, dan bar warna (hijau aman, kuning >=75%, merah penuh)
-function selBeban(terisi, kuota) {
+function selBeban(terisi, kuota, label) {
   var persen = kuota ? Math.min(100, Math.round(terisi / kuota * 100)) : 100;
   var warna = '';
   if (persen >= 100) warna = 'full';
@@ -18,20 +25,19 @@ function selBeban(terisi, kuota) {
   var sisaSlot = Math.max(0, kuota - terisi);
   var labelSisa = sisaSlot === 0 ? 'Penuh' : 'Sisa ' + sisaSlot;
 
-  return `<td class="rk-cell"><div class="rk-top"><b>${terisi}<span class="rk-kuota">/${kuota}</span></b><span class="rk-sisa ${warna}">${labelSisa}</span></div>
+  return `<td class="rk-cell"><div class="rk-top"><b>${terisi}<span class="rk-kuota">/${esc(label)}</span></b><span class="rk-sisa ${warna}">${labelSisa}</span></div>
     <div class="load-bar"><i class="${warna}" style="width:${persen}%"></i></div></td>`;
 }
 
 function drawRekap() {
   var total = 0, isi = 0, aktif = 0, sisa1 = 0, sisa2 = 0;
-  for (var i = 0; i < DOSEN.length; i++) {
-    var d = DOSEN[i];
-    total += d.kuota + d.kuota2; // kuota pembimbing 1 + pembimbing 2
+  DOSEN.forEach(function (d) {
+    total += d.kuota + d.kuota2;
     isi += d.terisi + d.terisi2;
     sisa1 += sisa(d, 1);
     sisa2 += sisa(d, 2);
     if (d.menerima) aktif++;
-  }
+  });
 
   var stats = [
     ['bi-person-badge', '', 'Dosen aktif', aktif],
@@ -39,31 +45,44 @@ function drawRekap() {
     ['bi-person', 'b', 'Sisa kuota Pembimbing 1', sisa1],
     ['bi-people', 'a', 'Sisa kuota Pembimbing 2', sisa2]
   ];
-  var htmlStats = '';
-  stats.forEach(function (s) {
-    htmlStats += `<div class="col-6 col-lg-3"><div class="card-x stat"><div class="ico ${s[1]}"><i class="bi ${s[0]}"></i></div><div><b>${s[3]}</b><span>${s[2]}</span></div></div></div>`;
-  });
-  $('#stats').innerHTML = htmlStats;
+  $('#stats').innerHTML = stats.map(function (s) {
+    return `<div class="col-6 col-lg-3"><div class="card-x stat"><div class="ico ${s[1]}"><i class="bi ${s[0]}"></i></div><div><b>${s[3]}</b><span>${s[2]}</span></div></div></div>`;
+  }).join('');
 
-  // urutkan dari yg bebannya paling banyak
-  var urutDosen = DOSEN.slice();
-  urutDosen.sort(function (a, b) {
+  var urutDosen = DOSEN.slice().sort(function (a, b) {
     return (b.terisi + b.terisi2) / ((b.kuota + b.kuota2) || 1) - (a.terisi + a.terisi2) / ((a.kuota + a.kuota2) || 1);
   });
 
-  var baris = '';
-  urutDosen.forEach(function (d) {
+  var baris = urutDosen.map(function (d) {
     var tidakTerima = d.menerima ? '' : ' <span class="badge-s nonaktif ms-1">Tidak menerima</span>';
-
-    baris += `<tr><td><div class="d-flex align-items-center gap-2">${avatar(d,'xs')}<div class="fw-semibold">${esc(d.nama)}${tidakTerima}</div></div></td>
-      ${selBeban(d.terisi, d.kuota)}
-      ${selBeban(d.terisi2, d.kuota2)}
+    return `<tr><td><div class="d-flex align-items-center gap-2">${avatar(d, 'xs')}<div><div class="fw-semibold">${esc(d.nama)}${tidakTerima}</div><div class="small text-muted">${esc(d.peminatan)}${d.antrean + d.antrean2 ? ' · ' + (d.antrean + d.antrean2) + ' antre' : ''}</div></div></div></td>
+      ${selBeban(d.terisi, d.kuota, d.labelKuota)}
+      ${selBeban(d.terisi2, d.kuota2, d.labelKuota2)}
       <td class="rk-total"><b>${d.terisi + d.terisi2}</b><span class="text-muted">/${d.kuota + d.kuota2}</span></td></tr>`;
-  });
+  }).join('');
 
   $('#bars').innerHTML = `<div style="overflow-x:auto"><table class="table-x rekap-tabel"><thead><tr>
     <th>Dosen</th><th>Pembimbing 1 (terisi/kuota)</th><th>Pembimbing 2 (terisi/kuota)</th><th class="text-end">Total</th></tr></thead><tbody>${baris}</tbody></table></div>`;
+
+  // MR-10: sebaran slot per peminatan
+  var pem = DB.data.peminatan;
+  $('#rekapPeminatan').innerHTML = pem.length == 0
+    ? '<div class="small text-muted">Belum ada periode aktif.</div>'
+    : `<div style="overflow-x:auto"><table class="table-x rekap-tabel"><thead><tr><th>Peminatan</th><th>Terisi/kuota</th></tr></thead><tbody>${pem.map(function (p) {
+      return `<tr><td class="fw-semibold">${esc(p.peminatan)}</td>${selBeban(p.terisi, p.kuota, String(p.kuota))}</tr>`;
+    }).join('')}</tbody></table></div>`;
 }
+
+// download rekap CSV dari server (MR-07)
+function exportCSV() {
+  if (!DB.data.periode) {
+    toast('Belum ada periode aktif untuk direkap.', 'warning');
+    return;
+  }
+  window.location.href = API_BASE + '/koordinator/rekap.csv';
+  toast('Rekap beban dosen dan peminatan diekspor ke CSV.', 'success');
+}
+
 
 // ===== TAMBAH DOSEN =====
 var modalDosen = null;
@@ -71,34 +90,31 @@ var modalDosen = null;
 function bukaTambahDosen() {
   if (!modalDosen) modalDosen = new bootstrap.Modal('#mTambahDosen');
 
-  // pilihan bidang keahlian dari daftar BIDANG di data.js
-  var html = '';
-  BIDANG.forEach(function (b, i) {
-    html += `<label class="chip"><input type="checkbox" class="d-none" name="tdBidang" value="${i}">${esc(b)}</label>`;
-  });
-  $('#tdBidang').innerHTML = html;
+  $('#tdBidang').innerHTML = BIDANG.map(function (b, i) {
+    return `<label class="chip"><input type="checkbox" class="d-none" name="tdBidang" value="${i}">${esc(b)}</label>`;
+  }).join('');
   $$('#tdBidang .chip').forEach(function (chip) {
     chip.addEventListener('click', function () {
-      // checkbox di dalam label berubah setelah klik, jadi baca statusnya di tick berikutnya
       setTimeout(function () {
         chip.classList.toggle('on', chip.querySelector('input').checked);
       }, 0);
     });
   });
 
-  $('#tdNama').value = '';
-  $('#tdNidn').value = '';
-  $('#tdKata').value = '';
-  $('#tdKuota1').value = 6;
-  $('#tdKuota2').value = 6;
+  ['#tdNama', '#tdNidn', '#tdKata', '#tdEmail', '#tdSandi'].forEach(function (s) {
+    $(s).value = '';
+  });
+  var kuotaAwal = DB.data.periode ? DOSEN.reduce(function (m, d) { return Math.max(m, d.kuotaDasar || 0); }, 0) || 6 : 6;
+  $('#tdKuota1').value = kuotaAwal;
+  $('#tdKuota2').value = kuotaAwal;
   $('#tdMenerima').checked = true;
   $('#tdErr').textContent = '';
   modalDosen.show();
 }
 
-function simpanDosenBaru() {
+async function simpanDosenBaru(btn) {
   var bidang = $$('input[name=tdBidang]:checked').map(function (x) {
-    return Number(x.value);
+    return BIDANG[Number(x.value)];
   });
   var kata = $('#tdKata').value.split(',').map(function (x) {
     return x.trim().toLowerCase();
@@ -106,86 +122,66 @@ function simpanDosenBaru() {
     return x != '';
   });
 
-  var r = DB.tambahDosen({
-    nama: $('#tdNama').value,
-    nidn: $('#tdNidn').value,
-    bidang: bidang,
-    kata: kata,
-    kuota1: $('#tdKuota1').value,
-    kuota2: $('#tdKuota2').value,
+  tombolSibuk(btn, true, 'Menyimpan...');
+  var r = await Api.post('/koordinator/dosen', {
+    nama: $('#tdNama').value.trim(),
+    nidn: $('#tdNidn').value.trim(),
+    email: $('#tdEmail').value.trim(),
+    kata_sandi: $('#tdSandi').value,
+    peminatan_utama: $('#tdPeminatan').value,
+    bidang_keahlian: bidang,
+    kata_kunci: kata,
+    kuota_p1: Number($('#tdKuota1').value),
+    kuota_p2: Number($('#tdKuota2').value),
     menerima: $('#tdMenerima').checked
   });
+  tombolSibuk(btn, false);
 
   if (!r.ok) {
-    $('#tdErr').textContent = r.msg;
+    $('#tdErr').textContent = pesanError(r);
     return;
   }
 
   modalDosen.hide();
-  toast(r.dosen.nama + ' ditambahkan sebagai dosen pembimbing.', 'success');
-}
-
-// download rekap jadi file csv
-function exportCSV() {
-  var rows = [['Nama Dosen', 'NIDN', 'Kuota Pembimbing 1', 'Terisi Pembimbing 1', 'Sisa Pembimbing 1', 'Kuota Pembimbing 2', 'Terisi Pembimbing 2', 'Sisa Pembimbing 2', 'Status']];
-  DOSEN.forEach(function (d) {
-    rows.push([d.nama, d.nidn, d.kuota, d.terisi, sisa(d, 1), d.kuota2, d.terisi2, sisa(d, 2), statusDosen(d)]);
-  });
-
-  var csv = '';
-  for (var i = 0; i < rows.length; i++) {
-    var baris = rows[i].map(function (c) {
-      return '"' + String(c).replace(/"/g, '""') + '"'; // tanda kutip di-escape
-    });
-    csv += baris.join(',');
-    if (i < rows.length - 1) csv += '\n';
-  }
-
-  var blob = new Blob([csv], { type: 'text/csv' });
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'rekap-beban-dosen-' + PERIODE.kode + '.csv';
-  a.click();
-
-  toast('Rekap beban dosen diekspor ke CSV.', 'success');
+  await DB.segarkan();
+  toast(r.data.pesan, 'success');
 }
 
 
-
-// ===== KUOTA =====
-// kuota Pembimbing 1 dan Pembimbing 2 diatur sendiri2 per dosen, sisa kuota ikut dihitung per peran
-// baris tabel dibikin sekali, abis itu cuma angkanya yg diupdate
-// biar input yg lagi diketik ga ilang pas data berubah
-function sel_kuota(peran) {
-  return peran == 2 ? 'k2' : 'k1';
-}
-
+// ===== KUOTA DOSEN (MR-07) =====
+// baris tabel dibikin sekali, abis itu cuma angkanya yg diupdate biar input yg lagi diketik ga ilang
 function drawKuota() {
   var body = $('#kuotaBody');
 
-  if (body.children.length != DOSEN.length) {
-    var html = '';
-    DOSEN.forEach(function (d) {
-      html += `<tr data-row="${d.id}"><td><div class="d-flex align-items-center gap-2">${avatar(d,'xs')}<b class="k-nama">${esc(d.nama)}</b></div></td>
+  var idBaris = $$('tr[data-row]', body).map(function (tr) { return tr.dataset.row; }).join(',');
+  var idDosen = DOSEN.map(function (d) { return String(d.id); }).join(',');
+
+  if (idBaris !== idDosen) {
+    body.innerHTML = DOSEN.map(function (d) {
+      return `<tr data-row="${d.id}"><td><div class="d-flex align-items-center gap-2">${avatar(d, 'xs')}<div><b class="k-nama">${esc(d.nama)}</b><div class="small text-muted">${esc(d.peminatan)}</div></div></div></td>
       <td><input type="number" min="0" max="20" class="form-control form-control-sm mb-1" style="width:90px" data-k="${d.id}" data-p="1"><div class="small text-muted k-info1"></div></td>
       <td><input type="number" min="0" max="20" class="form-control form-control-sm mb-1" style="width:90px" data-k="${d.id}" data-p="2"><div class="small text-muted k-info2"></div></td>
-      <td><div class="d-flex align-items-center gap-2"><div class="form-check form-switch m-0"><input class="form-check-input k-saklar" type="checkbox" role="switch" data-s="${d.id}" title="Menerima bimbingan"></div><span class="k-status"></span></div></td></tr>`;
-    });
-    body.innerHTML = html;
+      <td><div class="d-flex align-items-center gap-2"><div class="form-check form-switch m-0"><input class="form-check-input k-saklar" type="checkbox" role="switch" data-s="${d.id}" title="Menerima bimbingan"></div><span class="k-status"></span></div></td>
+      <td><button class="btn btn-ghost btn-sm text-nowrap" onclick="bukaSlot(${d.id})"><i class="bi bi-plus-circle me-1"></i>Slot tambahan</button></td></tr>`;
+    }).join('');
 
-    // saklar menerima / tidak menerima langsung disimpan (ga nunggu tombol Simpan kuota)
+    // saklar menerima / tidak menerima langsung disimpan
     $$('.k-saklar', body).forEach(function (saklar) {
-      saklar.addEventListener('change', function () {
+      saklar.addEventListener('change', async function () {
         var d = findDosen(saklar.dataset.s);
-        DB.setMenerima(d.id, saklar.checked);
-        toast(d.nama + (saklar.checked ? ' sekarang menerima bimbingan.' : ' sekarang tidak menerima bimbingan.'), saklar.checked ? 'success' : 'dark');
+        var r = await Api.put('/koordinator/dosen/' + d.id + '/menerima', { menerima: saklar.checked });
+        if (!r.ok) {
+          toast(pesanError(r), 'danger');
+        } else {
+          toast(d.nama + (saklar.checked ? ' sekarang menerima bimbingan.' : ' sekarang tidak menerima bimbingan.'), saklar.checked ? 'success' : 'dark');
+        }
+        DB.segarkan();
       });
     });
 
     $$('[data-k]', body).forEach(function (input) {
       input.addEventListener('input', function () {
         draftKuota[input.dataset.k + '-' + input.dataset.p] = input.value;
-        // sisa ikut berubah langsung pas kuota diketik
         infoKuota(findDosen(input.dataset.k), Number(input.dataset.p), input.value);
       });
     });
@@ -200,8 +196,9 @@ function drawKuota() {
     [1, 2].forEach(function (peran) {
       var input = $('[data-p="' + peran + '"]', row);
       var kunci = d.id + '-' + peran;
+      input.disabled = !DB.data.periode;
       if (draftKuota[kunci] === undefined && document.activeElement !== input) {
-        input.value = kuotaPeran(d, peran);
+        input.value = peran == 2 ? d.kuotaDasar2 : d.kuotaDasar;
       }
       infoKuota(d, peran, input.value);
     });
@@ -212,127 +209,285 @@ function drawKuota() {
 function infoKuota(d, peran, nilaiInput) {
   var row = $('[data-row="' + d.id + '"]');
   var terisi = peran == 2 ? d.terisi2 : d.terisi;
+  var tambahan = peran == 2 ? d.tambahan2 : d.tambahan;
   var kuota = nilaiInput === '' ? 0 : Number(nilaiInput);
-  var sisaBaru = Math.max(0, kuota - terisi);
-  $('.k-info' + peran, row).innerHTML = 'Terisi <b>' + terisi + '</b> · Sisa <b>' + sisaBaru + '</b>';
+  var sisaBaru = Math.max(0, kuota + tambahan - terisi);
+  $('.k-info' + peran, row).innerHTML = 'Terisi <b>' + terisi + '</b> · Sisa <b>' + sisaBaru + '</b>' + (tambahan ? ' · <span style="color:var(--green)">+' + tambahan + ' tambahan</span>' : '');
 }
 
-// ubah status semua dosen sekaligus
-function setMenerimaSemua(menerima) {
-  var n = DB.setMenerima(null, menerima);
-  if (n == 0) {
+async function setMenerimaSemua(menerima) {
+  var ubah = DOSEN.filter(function (d) { return d.menerima !== menerima; });
+  if (ubah.length == 0) {
     toast('Semua dosen sudah ' + (menerima ? 'menerima' : 'tidak menerima') + ' bimbingan.', 'dark');
     return;
   }
-  toast(n + ' dosen sekarang ' + (menerima ? 'menerima' : 'tidak menerima') + ' bimbingan.', menerima ? 'success' : 'dark');
+  await Promise.all(ubah.map(function (d) {
+    return Api.put('/koordinator/dosen/' + d.id + '/menerima', { menerima: menerima });
+  }));
+  await DB.segarkan();
+  toast(ubah.length + ' dosen sekarang ' + (menerima ? 'menerima' : 'tidak menerima') + ' bimbingan.', menerima ? 'success' : 'dark');
 }
 
-function simpanKuota() {
-  DB.segarkan();
-  var valid = true;
-  var peta = {};
-
-  $$('[data-k]').forEach(function (input) {
-    var nilai = Number(input.value);
-    var id = Number(input.dataset.k);
-    var peran = Number(input.dataset.p);
-    var d = findDosen(id);
-    var terisi = peran == 2 ? d.terisi2 : d.terisi;
-
-    // kuota harus bilangan bulat 0-20 dan ga boleh kurang dari yg udah terisi di peran itu
-    var salah = input.value === '' || !Number.isInteger(nilai) || nilai < 0 || nilai > 20 || nilai < terisi;
-    input.classList.toggle('is-invalid', salah);
-
-    if (salah) {
-      valid = false;
-    } else {
-      if (!peta[id]) peta[id] = {};
-      peta[id][sel_kuota(peran)] = nilai;
-    }
-  });
-
-  if (!valid) {
-    toast('Kuota harus 0–20 dan tidak boleh di bawah jumlah mahasiswa yang sudah terisi pada pembimbing tersebut.', 'danger');
+async function simpanKuota(btn) {
+  if (!DB.data.periode) {
+    toast('Buka periode terlebih dahulu.', 'warning');
     return;
   }
 
+  // validasi dulu: 0-20 dan tidak di bawah jumlah terisi
+  var ubah = [];
+  var valid = true;
+  $$('[data-k]').forEach(function (input) {
+    var d = findDosen(input.dataset.k);
+    var peran = Number(input.dataset.p);
+    var nilai = Number(input.value);
+    var terisi = peran == 2 ? d.terisi2 : d.terisi;
+    var salah = input.value === '' || !Number.isInteger(nilai) || nilai < 0 || nilai > 20 || nilai < terisi;
+    input.classList.toggle('is-invalid', salah);
+    if (salah) valid = false;
+    else if (nilai !== (peran == 2 ? d.kuotaDasar2 : d.kuotaDasar)) ubah.push({ d: d, peran: peran, kuota: nilai });
+  });
+
+  if (!valid) {
+    toast('Kuota harus 0–20 dan tidak boleh di bawah jumlah mahasiswa yang sudah terisi pada peran tersebut.', 'danger');
+    return;
+  }
+  if (ubah.length == 0) {
+    toast('Tidak ada perubahan kuota.', 'dark');
+    return;
+  }
+
+  tombolSibuk(btn, true, 'Menyimpan...');
+  var gagal = [];
+  var promosi = 0;
+  for (var i = 0; i < ubah.length; i++) {
+    var u = ubah[i];
+    var r = await Api.put('/koordinator/dosen/' + u.d.id + '/kuota', { peran: String(u.peran), kuota: u.kuota });
+    if (!r.ok) gagal.push(u.d.nama + ': ' + pesanError(r));
+    else promosi += r.data.antrean_dipromosikan || 0;
+  }
+  tombolSibuk(btn, false);
+
   draftKuota = {};
-  DB.setKuota(peta);
-  toast('Kuota tersimpan.', 'success');
+  await DB.segarkan();
+  if (gagal.length) toast(gagal.join(' '), 'danger');
+  else toast(ubah.length + ' kuota tersimpan.' + (promosi ? ' ' + promosi + ' mahasiswa dari antrean dipromosikan.' : ''), 'success');
 }
 
 
-// ===== PERIODE =====
-// isi input tanggal dari DB (dipanggil pas halaman dibuka & abis disimpan)
-function isiTanggalPeriode() {
-  $('#pMulai').value = DB.data.periode.mulai;
-  $('#pSelesai').value = DB.data.periode.selesai;
-}
+// ===== SLOT TAMBAHAN (MR-07) =====
+var slotDosenId = null;
+var modalSlot = null;
 
-// ambil & cek tanggal dari input, null kalau ga valid
-function bacaTanggalPeriode() {
-  var mulai = $('#pMulai').value;
-  var selesai = $('#pSelesai').value;
-
-  if (!mulai || !selesai) {
-    toast('Tanggal mulai dan selesai wajib diisi.', 'danger');
-    return null;
+function bukaSlot(id) {
+  if (!DB.data.periode) {
+    toast('Buka periode terlebih dahulu.', 'warning');
+    return;
   }
-  if (mulai > selesai) {
-    toast('Tanggal mulai tidak boleh setelah tanggal selesai.', 'danger');
-    return null;
+  if (!modalSlot) modalSlot = new bootstrap.Modal('#mSlot');
+  var d = findDosen(id);
+  slotDosenId = id;
+  $('#slotDosen').textContent = d.nama + ' · P1 ' + d.terisi + '/' + d.labelKuota + ' · P2 ' + d.terisi2 + '/' + d.labelKuota2;
+  $('#slotPeran').value = sisa(d, 1) === 0 ? '1' : sisa(d, 2) === 0 ? '2' : '1';
+  $('#slotJumlah').value = 1;
+  $('#slotAlasan').value = '';
+  $('#slotErr').textContent = '';
+  modalSlot.show();
+}
+
+async function kirimSlot(btn) {
+  var alasan = $('#slotAlasan').value.trim();
+  if (alasan.length < 10) {
+    $('#slotErr').textContent = 'Alasan minimal 10 karakter (sekarang ' + alasan.length + ').';
+    return;
   }
-  return { mulai: mulai, selesai: selesai };
+  tombolSibuk(btn, true, 'Menyimpan...');
+  var r = await Api.post('/koordinator/dosen/' + slotDosenId + '/slot-tambahan', {
+    peran: $('#slotPeran').value,
+    jumlah: Number($('#slotJumlah').value),
+    alasan: alasan
+  });
+  tombolSibuk(btn, false);
+
+  if (!r.ok) {
+    $('#slotErr').textContent = pesanError(r);
+    return;
+  }
+  modalSlot.hide();
+  await DB.segarkan();
+  toast(r.data.pesan + (r.data.antrean_dipromosikan ? ' ' + r.data.antrean_dipromosikan + ' mahasiswa dari antrean dipromosikan.' : ''), 'success');
 }
 
-function simpanPeriode() {
-  var t = bacaTanggalPeriode();
-  if (!t) return;
 
-  DB.setPeriode(t.mulai, t.selesai, DB.data.periode.buka);
-  isiTanggalPeriode();
-  toast('Tanggal periode disimpan: ' + fmtDate(t.mulai) + ' – ' + fmtDate(t.selesai) + '.', 'success');
-}
-
-function bukaTutupPeriode() {
-  var t = bacaTanggalPeriode();
-  if (!t) return;
-
-  var buka = !DB.data.periode.buka;
-  DB.setPeriode(t.mulai, t.selesai, buka);
-  isiTanggalPeriode();
-  toast(buka ? 'Periode dibuka.' : 'Periode ditutup. Mahasiswa tidak bisa mengajukan.', 'dark');
-}
+// ===== PERIODE (MR-07) =====
+// kartu periode cuma digambar ulang kalau periodenya ganti, biar isian yg lagi diketik ga ilang
+var kunciPeriode = null;
 
 function drawPeriode() {
-  var btn = $('#btnPeriode');
   var pr = DB.data.periode;
+  var kunci = pr ? 'p' + pr.id : 'kosong';
 
-  if (!pr.buka) {
-    $('#pStatus').innerHTML = '<span class="sbadge sb-Dibatalkan">Periode ditutup</span>';
-    btn.textContent = 'Buka periode';
-    btn.className = 'btn btn-red w-100';
-  } else {
-    if (periodeAktif().ok) {
-      $('#pStatus').innerHTML = '<span class="live">Periode dibuka</span>';
+  if (kunci !== kunciPeriode) {
+    kunciPeriode = kunci;
+    if (pr) {
+      $('#periodeCard').innerHTML = `
+        <div class="d-flex justify-content-between align-items-center mb-1"><b>${esc(pr.nama)}</b><span id="pStatus"></span></div>
+        <div class="small text-muted mb-3">Kode ${esc(pr.kode)} · ${pr.jumlahMhs} mahasiswa Penulisan Proposal</div>
+        <label class="form-label fw-bold">Tanggal mulai</label><input type="date" class="form-control mb-3" id="pMulai" value="${pr.mulai}">
+        <label class="form-label fw-bold">Tanggal selesai</label><input type="date" class="form-control mb-3" id="pSelesai" value="${pr.selesai}">
+        <div class="small text-muted mb-3">Pengajuan di luar periode ditolak sistem.</div>
+        <button class="btn btn-ghost w-100 mb-2" onclick="simpanPeriode(this)"><i class="bi bi-save me-1"></i>Simpan tanggal</button>
+        <button class="btn btn-ghost text-danger w-100" onclick="tutupPeriode(this)"><i class="bi bi-lock me-1"></i>Tutup periode</button>`;
     } else {
-      // dibuka, tapi hari ini di luar tanggal mulai - selesai
-      $('#pStatus').innerHTML = '<span class="sbadge sb-Menunggu" title="Mahasiswa tetap tidak bisa mengajukan">Dibuka · di luar rentang tanggal</span>';
+      var thn = new Date().getFullYear();
+      $('#periodeCard').innerHTML = `
+        <div class="d-flex justify-content-between align-items-center mb-3"><b>Belum ada periode aktif</b><span class="sbadge sb-Dibatalkan">Ditutup</span></div>
+        <label class="form-label fw-bold">Nama periode</label><input class="form-control mb-3" id="bNama" placeholder="Contoh: Genap ${thn}/${thn + 1}">
+        <label class="form-label fw-bold">Kode <span class="text-muted fw-normal">(dipakai di nomor surat)</span></label><input class="form-control mb-3" id="bKode" placeholder="Contoh: ${thn}-2">
+        <label class="form-label fw-bold">Tanggal mulai</label><input type="date" class="form-control mb-3" id="bMulai" value="${tglLokal()}">
+        <label class="form-label fw-bold">Tanggal selesai</label><input type="date" class="form-control mb-3" id="bSelesai">
+        <label class="form-label fw-bold">Jumlah mahasiswa Penulisan Proposal</label><input type="number" min="0" class="form-control mb-2" id="bJumlah" placeholder="Contoh: 42">
+        <div class="small text-muted mb-3">Kuota Pembimbing 1 dan 2 tiap dosen dihitung otomatis: jumlah mahasiswa ÷ dosen aktif (dibulatkan ke atas). Kuota peminatan dibagi rata.</div>
+        <button class="btn btn-red w-100" onclick="bukaPeriode(this)"><i class="bi bi-unlock me-1"></i>Buka periode</button>`;
     }
-    btn.textContent = 'Tutup periode';
-    btn.className = 'btn btn-ghost text-danger w-100';
+  }
+
+  if (pr && $('#pStatus')) {
+    $('#pStatus').innerHTML = periodeAktif().ok
+      ? '<span class="live">Periode dibuka</span>'
+      : '<span class="sbadge sb-Menunggu" title="Mahasiswa tetap tidak bisa mengajukan">Di luar rentang tanggal</span>';
   }
 }
 
+async function simpanPeriode(btn) {
+  var mulai = $('#pMulai').value;
+  var selesai = $('#pSelesai').value;
+  if (!mulai || !selesai || mulai >= selesai) {
+    toast('Tanggal mulai dan selesai wajib diisi, dan tanggal selesai harus setelah tanggal mulai.', 'danger');
+    return;
+  }
+  tombolSibuk(btn, true, 'Menyimpan...');
+  var r = await Api.put('/koordinator/periode/' + DB.data.periode.id, { tgl_mulai: mulai, tgl_selesai: selesai });
+  tombolSibuk(btn, false);
+  if (!r.ok) {
+    toast(pesanError(r), 'danger');
+    return;
+  }
+  await DB.segarkan();
+  toast('Tanggal periode disimpan: ' + fmtDate(mulai) + ' – ' + fmtDate(selesai) + '.', 'success');
+}
 
-// ===== PENETAPAN PEMBIMBING =====
-// satu kartu per mahasiswa berisi Pembimbing 1 dan Pembimbing 2, koordinator bisa mindahin keduanya ke dosen mana aja
+async function tutupPeriode(btn) {
+  var pr = DB.data.periode;
+  if (!confirm('Tutup periode ' + pr.nama + '? Mahasiswa tidak bisa mengajukan lagi, dan periode baru harus dibuka untuk melanjutkan.')) return;
+  tombolSibuk(btn, true, 'Menutup...');
+  var r = await Api.post('/koordinator/periode/' + pr.id + '/tutup');
+  tombolSibuk(btn, false);
+  if (!r.ok) {
+    toast(pesanError(r), 'danger');
+    return;
+  }
+  await DB.segarkan();
+  toast('Periode ditutup. Mahasiswa tidak bisa mengajukan.', 'dark');
+}
+
+async function bukaPeriode(btn) {
+  var body = {
+    nama: $('#bNama').value.trim(),
+    kode: $('#bKode').value.trim(),
+    tgl_mulai: $('#bMulai').value,
+    tgl_selesai: $('#bSelesai').value,
+    jumlah_mhs_proposal: Number($('#bJumlah').value)
+  };
+  tombolSibuk(btn, true, 'Membuka...');
+  var r = await Api.post('/koordinator/periode', body);
+  tombolSibuk(btn, false);
+  if (!r.ok) {
+    toast(pesanError(r), 'danger');
+    return;
+  }
+  await DB.segarkan();
+  toast(r.data.pesan, 'success');
+}
+
+
+// ===== KUOTA PEMINATAN (MR-10) & AMBANG KEMIRIPAN (MR-09) =====
+var kunciPeminatan = null;
+
+function drawPeminatan() {
+  var pr = DB.data.periode;
+  var kunci = pr ? 'p' + pr.id : 'kosong';
+
+  if (kunci !== kunciPeminatan) {
+    kunciPeminatan = kunci;
+    if (!pr) {
+      $('#peminatanCard').innerHTML = '<div class="small text-muted">Buka periode terlebih dahulu.</div>';
+      return;
+    }
+    $('#peminatanCard').innerHTML = DB.data.peminatan.map(function (p) {
+      return `<div class="d-flex align-items-center gap-2 mb-2"><b style="width:56px">${esc(p.peminatan)}</b>
+        <input type="number" min="0" class="form-control form-control-sm" style="width:90px" data-pem="${esc(p.peminatan)}" value="${p.kuota}">
+        <span class="small text-muted" data-pem-info="${esc(p.peminatan)}"></span></div>`;
+    }).join('') + `
+      <button class="btn btn-ghost btn-sm w-100 mb-3" onclick="simpanKuotaPeminatan(this)"><i class="bi bi-save me-1"></i>Simpan kuota peminatan</button>
+      <label class="form-label fw-bold">Ambang kemiripan judul (%)</label>
+      <div class="input-group mb-1"><input type="number" min="50" max="100" class="form-control" id="ambang" value="${Math.round(pr.ambang * 100)}"><button class="btn btn-ghost" onclick="simpanAmbang(this)">Simpan</button></div>
+      <div class="small text-muted">Judul dengan kemiripan sama atau di atas ambang ditolak sistem (awal 80%).</div>`;
+  }
+
+  if (pr) {
+    DB.data.peminatan.forEach(function (p) {
+      var el = $('[data-pem-info="' + p.peminatan + '"]');
+      if (el) el.innerHTML = 'Terisi <b>' + p.terisi + '</b> · Sisa <b>' + p.sisa + '</b>';
+    });
+  }
+}
+
+async function simpanKuotaPeminatan(btn) {
+  var ubah = $$('[data-pem]').filter(function (input) {
+    var p = DB.data.peminatan.find(function (x) { return x.peminatan === input.dataset.pem; });
+    return p && Number(input.value) !== p.kuota;
+  });
+  if (ubah.length == 0) {
+    toast('Tidak ada perubahan kuota peminatan.', 'dark');
+    return;
+  }
+
+  tombolSibuk(btn, true, 'Menyimpan...');
+  var gagal = [];
+  for (var i = 0; i < ubah.length; i++) {
+    var r = await Api.put('/koordinator/kuota-peminatan', { peminatan: ubah[i].dataset.pem, kuota: Number(ubah[i].value) });
+    if (!r.ok) gagal.push(pesanError(r));
+  }
+  tombolSibuk(btn, false);
+
+  kunciPeminatan = null; // gambar ulang isian dengan nilai dari server
+  await DB.segarkan();
+  if (gagal.length) toast(gagal.join(' '), 'danger');
+  else toast('Kuota peminatan disimpan.', 'success');
+}
+
+async function simpanAmbang(btn) {
+  tombolSibuk(btn, true, '...');
+  var r = await Api.put('/koordinator/periode/' + DB.data.periode.id + '/ambang', { ambang: Number($('#ambang').value) });
+  tombolSibuk(btn, false);
+  if (!r.ok) {
+    toast(pesanError(r), 'danger');
+    return;
+  }
+  await DB.segarkan();
+  toast(r.data.pesan, 'success');
+}
+
+
+// ===== PENETAPAN PEMBIMBING (MR-07) =====
 var kataCariSah = '';
+var filterSah = 'semua';
 
-// pembimbing aktif mahasiswa untuk peran tertentu (yg udah Ditetapkan diutamain)
+// pembimbing aktif mahasiswa untuk peran tertentu
 function pembimbingAktif(nim, peran) {
   var cocok = DB.data.pengajuan.filter(function (x) {
-    return x.nim === nim && peranKe(x) === peran && STATUS_AKTIF.indexOf(x.status) != -1;
+    return x.nim === nim && peranKe(x) === peran && STATUS_SLOT.indexOf(x.status) != -1;
   });
   return cocok.find(function (x) { return x.status == 'Ditetapkan'; }) || cocok[0] || null;
 }
@@ -340,7 +495,7 @@ function pembimbingAktif(nim, peran) {
 function daftarMahasiswaSah() {
   var peta = {};
   DB.data.pengajuan.forEach(function (p) {
-    if (STATUS_AKTIF.indexOf(p.status) == -1) return;
+    if (STATUS_SLOT.indexOf(p.status) == -1) return;
     if (!peta[p.nim]) peta[p.nim] = { nim: p.nim, nama: p.mhs };
   });
 
@@ -351,6 +506,12 @@ function daftarMahasiswaSah() {
     m.judul = (m.p1 || m.p2).judul;
     return m;
   });
+
+  if (filterSah === 'sahkan') {
+    hasil = hasil.filter(function (m) {
+      return [m.p1, m.p2].some(function (p) { return p && p.status == 'Diterima'; });
+    });
+  }
 
   var q = kataCariSah.trim().toLowerCase();
   if (q) {
@@ -363,57 +524,52 @@ function daftarMahasiswaSah() {
   });
 }
 
-// kotak satu pembimbing di dalam kartu mahasiswa
 function slotPembimbingHTML(m, peran, p) {
   if (!p) {
-    var aksi = '';
-    if (peran == 2 && m.p1) {
-      aksi = `<button class="btn btn-red btn-sm mt-2" onclick="bukaPindah(null, '${m.nim}', 2)"><i class="bi bi-person-plus me-1"></i>Tetapkan Pembimbing 2</button>`;
-    }
     return `<div class="pt-slot kosong"><div class="pt-label">Pembimbing ${peran}</div>
-      <div class="text-muted small">Belum ada Pembimbing ${peran}.</div>${aksi}</div>`;
+      <div class="text-muted small">Belum ada Pembimbing ${peran}.</div></div>`;
   }
 
-  var d = findDosen(p.dosenId);
-  var status = p.status == 'Ditetapkan'
-    ? `<span class="sbadge sb-Ditetapkan"><i class="bi bi-patch-check me-1"></i>Ditetapkan ${fmtDate(p.tglSah)}</span>`
-    : `<span class="sbadge sb-Menunggu"><i class="bi bi-clock me-1"></i>Menunggu dosen</span>`;
-  var dipindah = '';
-  if (p.riwayatPindah) {
-    dipindah = '<span class="pt-tag"><i class="bi bi-arrow-left-right me-1"></i>Keputusan prodi</span>';
-  } else if (p.disetujuiKoor) {
-    dipindah = '<span class="pt-tag"><i class="bi bi-shield-check me-1"></i>Disetujui koordinator</span>';
+  var d = dosenAtau(p.dosenId);
+  var status = '';
+  var aksi = '';
+
+  if (p.status == 'Ditetapkan') {
+    status = `<span class="sbadge sb-Ditetapkan"><i class="bi bi-patch-check me-1"></i>Ditetapkan ${fmtDate(p.tglSah)}</span>`;
+    aksi = `<a class="btn btn-ghost btn-sm w-100" target="_blank" href="${API_BASE}/pengajuan/${p.id}/surat"><i class="bi bi-file-earmark-pdf me-1"></i>${esc(p.nomorSurat || 'Unduh surat')}</a>`;
+  } else if (p.status == 'Diterima') {
+    status = `<span class="sbadge sb-Diterima"><i class="bi bi-check2 me-1"></i>Diterima dosen ${fmtDate(p.tglKeputusan)}</span>`;
+    aksi = `<button class="btn btn-red btn-sm w-100" onclick="sahkan(${p.id}, this)"><i class="bi bi-patch-check me-1"></i>Sahkan &amp; terbitkan surat</button>`;
+  } else {
+    status = `<span class="sbadge sb-Menunggu"><i class="bi bi-clock me-1"></i>Menunggu dosen</span>`;
+    aksi = `<button class="btn btn-ghost btn-sm w-100" onclick="bukaPindah(${p.id})"><i class="bi bi-arrow-left-right me-1"></i>Pindahkan Pembimbing ${peran}</button>`;
   }
 
-  // pengajuan yg masih nunggu dosen bisa langsung ditetapkan koordinator
-  var tombolSetuju = '';
-  if (p.status == 'Menunggu') {
-    tombolSetuju = `<button class="btn btn-red btn-sm w-100 mb-2" onclick="setujuiSekarang(${p.id})"><i class="bi bi-check2-circle me-1"></i>Tetapkan tanpa menunggu dosen</button>`;
-  }
-
-  return `<div class="pt-slot"><div class="pt-label">Pembimbing ${peran}</div>
+  return `<div class="pt-slot"><div class="pt-label">Pembimbing ${peran}${p.peminatan ? ' · ' + esc(p.peminatan) : ''}</div>
     <div class="d-flex align-items-center gap-2 mb-2">${avatar(d, 'sm')}<div class="min-w-0"><b class="d-block text-truncate">${esc(d.nama)}</b>
       <span class="small text-muted">Sisa kuota Pembimbing ${peran}: ${sisa(d, peran)}</span></div></div>
-    <div class="d-flex flex-wrap gap-1 mb-2">${status}${dipindah}</div>
-    ${tombolSetuju}<button class="btn btn-ghost btn-sm w-100" onclick="bukaPindah(${p.id})"><i class="bi bi-arrow-left-right me-1"></i>Pindahkan Pembimbing ${peran}</button></div>`;
+    <div class="d-flex flex-wrap gap-1 mb-2">${status}</div>
+    ${aksi}</div>`;
 }
 
 function drawSah() {
-  var list = daftarMahasiswaSah();
   var wadah = $('#sahList');
   if (!wadah) return;
 
-  var info = $('#sahCount');
-  if (info) info.textContent = list.length + ' mahasiswa';
+  var semua = DB.data.pengajuan.filter(function (p) { return p.status == 'Diterima'; }).length;
+  $('#sahFilter').innerHTML = `<button class="chip ${filterSah == 'semua' ? 'on' : ''}" onclick="setFilterSah('semua')">Semua</button>
+    <button class="chip ${filterSah == 'sahkan' ? 'on' : ''}" onclick="setFilterSah('sahkan')">Perlu disahkan (${semua})</button>`;
+
+  var list = daftarMahasiswaSah();
+  $('#sahCount').textContent = list.length + ' mahasiswa';
 
   if (list.length == 0) {
     wadah.innerHTML = `<div class="col-12"><div class="card-x empty"><i class="bi bi-person-x"></i>Tidak ada mahasiswa yang cocok.</div></div>`;
     return;
   }
 
-  var html = '';
-  list.forEach(function (m) {
-    html += `<div class="col-lg-6"><div class="card-x pad pt-card">
+  wadah.innerHTML = list.map(function (m) {
+    return `<div class="col-lg-6"><div class="card-x pad pt-card">
       <div class="d-flex align-items-center gap-3 mb-3">
         <div class="av sm" style="background:${AV_COLORS[(m.nim.length + m.nama.length) % AV_COLORS.length]}">${initials(m.nama)}</div>
         <div class="min-w-0"><b class="d-block text-truncate">${esc(m.nama)}</b><span class="small text-muted">${esc(m.nim)}</span></div></div>
@@ -422,23 +578,12 @@ function drawSah() {
         <div class="col-sm-6">${slotPembimbingHTML(m, 1, m.p1)}</div>
         <div class="col-sm-6">${slotPembimbingHTML(m, 2, m.p2)}</div>
       </div></div></div>`;
-  });
-  wadah.innerHTML = html;
+  }).join('');
 }
 
-// koordinator nerima pengajuan Menunggu langsung, tanpa nunggu keputusan dosen
-function setujuiSekarang(id) {
-  var p = DB.cari(id);
-  if (!p) return;
-  var d = findDosen(p.dosenId);
-  if (!confirm('Tetapkan ' + d.nama + ' sebagai Pembimbing ' + peranKe(p) + ' ' + p.mhs + ' sekarang, tanpa menunggu keputusan dosen?')) return;
-
-  var r = DB.setujui(id);
-  if (!r.ok) {
-    toast(r.msg, 'danger');
-    return;
-  }
-  toast(r.p.mhs + ' resmi ditetapkan dengan ' + r.dosen.nama + ' sebagai Pembimbing ' + peranKe(r.p) + '.', 'success');
+function setFilterSah(f) {
+  filterSah = f;
+  drawSah();
 }
 
 function cariSah(nilai) {
@@ -446,65 +591,66 @@ function cariSah(nilai) {
   drawSah();
 }
 
+async function sahkan(id, btn) {
+  var p = DB.cari(id);
+  var d = dosenAtau(p.dosenId);
+  if (!confirm('Sahkan ' + d.nama + ' sebagai Pembimbing ' + peranKe(p) + ' ' + p.mhs + ' dan terbitkan surat penetapan?')) return;
 
-// ===== PINDAHKAN / TETAPKAN PEMBIMBING (keputusan prodi) =====
-// state modal: id pengajuan yg dipindah, atau nim + peran 2 kalau nambah pembimbing 2 baru
+  tombolSibuk(btn, true, 'Menerbitkan...');
+  var r = await Api.post('/koordinator/pengajuan/' + id + '/sahkan');
+  tombolSibuk(btn, false);
+  if (!r.ok) {
+    toast(pesanError(r), 'danger');
+    return;
+  }
+  await DB.segarkan();
+  toast('Penetapan disahkan. Nomor surat: ' + r.data.surat.nomor_surat + '.', 'success');
+}
+
+
+// ===== PINDAHKAN PENGAJUAN (MR-07) =====
 var pindahState = null;
 var modalPindah = null;
 
-// bukaPindah(idPengajuan) buat mindahin, bukaPindah(null, nim, 2) buat nambah pembimbing 2
-function bukaPindah(id, nim, peran) {
-  var p = id ? DB.cari(id) : null;
-  var mhs, lama, peranIni, nimIni;
-
-  if (p) {
-    mhs = p.mhs;
-    nimIni = p.nim;
-    peranIni = peranKe(p);
-    lama = findDosen(p.dosenId);
-    pindahState = { id: p.id, nim: nimIni, peran: peranIni };
-  } else {
-    var p1 = pembimbingAktif(nim, 1);
-    if (!p1) return;
-    mhs = p1.mhs;
-    nimIni = nim;
-    peranIni = peran || 2;
-    lama = null;
-    pindahState = { id: null, nim: nimIni, peran: peranIni };
-  }
+function bukaPindah(id) {
+  var p = DB.cari(id);
+  if (!p) return;
+  var peran = peranKe(p);
+  var lama = dosenAtau(p.dosenId);
+  pindahState = { id: p.id };
 
   if (!modalPindah) modalPindah = new bootstrap.Modal('#mPindah');
 
-  $('#pindahJudul').textContent = lama ? 'Pindahkan Pembimbing ' + peranIni : 'Tetapkan Pembimbing ' + peranIni;
-  $('#pindahInfo').innerHTML = `<div class="pt-alur"><div><span class="small text-muted d-block">Mahasiswa</span><b>${esc(mhs)}</b><div class="small text-muted">${esc(nimIni)}</div></div>
+  $('#pindahJudul').textContent = 'Pindahkan Pembimbing ' + peran;
+  $('#pindahInfo').innerHTML = `<div class="pt-alur"><div><span class="small text-muted d-block">Mahasiswa</span><b>${esc(p.mhs)}</b><div class="small text-muted">${esc(p.nim)}</div></div>
     <div class="pt-panah"><i class="bi bi-arrow-right"></i></div>
-    <div><span class="small text-muted d-block">${lama ? 'Dari' : 'Pembimbing 2'}</span><b>${lama ? esc(lama.nama) : 'Belum ada'}</b></div></div>`;
+    <div><span class="small text-muted d-block">Dari</span><b>${esc(lama.nama)}</b>${p.peminatan ? '<div class="small text-muted">Peminatan ' + esc(p.peminatan) + '</div>' : ''}</div></div>`;
 
-  // dosen yg udah jadi pembimbing lain mahasiswa ini ga bisa dipilih lagi
+  // dosen yg udah jadi pembimbing lain mahasiswa ini ga bisa dipilih
   var lainnya = DB.data.pengajuan.filter(function (x) {
-    return x.nim === nimIni && STATUS_AKTIF.indexOf(x.status) != -1 && (!p || x.id !== p.id);
+    return x.nim === p.nim && STATUS_SLOT.indexOf(x.status) != -1 && x.id !== p.id;
   }).map(function (x) { return x.dosenId; });
 
-  var html = '';
-  DOSEN.forEach(function (d) {
-    if (lama && d.id === lama.id) return;
-    if (lainnya.indexOf(d.id) != -1) return;
+  $('#pindahDaftar').innerHTML = DOSEN.filter(function (d) {
+    return d.id !== lama.id && lainnya.indexOf(d.id) == -1;
+  }).map(function (d) {
+    var s = sisa(d, peran);
+    var alasan = '';
+    if (peran == 1 && p.peminatan && d.peminatan !== p.peminatan) alasan = 'Peminatan ' + d.peminatan;
+    else if (s === 0) alasan = 'Kuota penuh';
 
-    var s = sisa(d, peranIni);
-    var badge;
-    if (!d.menerima) badge = '<span class="pick-badge nonaktif">Tidak menerima</span>';
-    else if (s === 0) badge = '<span class="pick-badge penuh">Kuota penuh</span>';
-    else badge = '<span class="pick-badge ok">Sisa ' + s + ' slot</span>';
+    var badge = alasan
+      ? `<span class="pick-badge penuh">${esc(alasan)}</span>`
+      : `<span class="pick-badge ok">Sisa ${s} slot</span>`;
 
-    html += `<label class="pick-item"><input type="radio" name="pindahDosen" value="${d.id}">
+    return `<label class="pick-item ${alasan ? 'opacity-50' : ''}"><input type="radio" name="pindahDosen" value="${d.id}" ${alasan ? 'disabled' : ''}>
       ${avatar(d, 'xs')}<div class="flex-grow-1 min-w-0"><b class="d-block text-truncate">${esc(d.nama)}</b>
-      <span class="small text-muted">Pembimbing ${peranIni}: ${peranIni == 2 ? d.terisi2 + '/' + d.kuota2 : d.terisi + '/' + d.kuota} terisi</span></div>${badge}</label>`;
-  });
-  $('#pindahDaftar').innerHTML = html;
+      <span class="small text-muted">${esc(d.peminatan)} · Pembimbing ${peran}: ${peran == 2 ? d.terisi2 + '/' + d.labelKuota2 : d.terisi + '/' + d.labelKuota} terisi</span></div>${badge}</label>`;
+  }).join('');
 
-  // tandai pilihan yg lagi aktif
   $$('#pindahDaftar .pick-item').forEach(function (item) {
     item.addEventListener('click', function () {
+      if (item.querySelector('input').disabled) return;
       $$('#pindahDaftar .pick-item').forEach(function (x) {
         x.classList.toggle('on', x === item);
       });
@@ -513,48 +659,87 @@ function bukaPindah(id, nim, peran) {
 
   $('#pindahAlasan').value = '';
   $('#pindahErr').textContent = '';
-  $('#pindahSubmit').textContent = lama ? 'Pindahkan' : 'Tetapkan';
   modalPindah.show();
 }
 
-function kirimPindah() {
+async function kirimPindah(btn) {
   var terpilih = $('input[name=pindahDosen]:checked');
-  var dosenId = terpilih ? terpilih.value : '';
-  var alasan = $('#pindahAlasan').value;
+  var alasan = $('#pindahAlasan').value.trim();
 
-  var r;
-  if (pindahState.id) {
-    r = DB.pindahkan(pindahState.id, dosenId, alasan);
-  } else {
-    r = DB.tetapkanPembimbing2(pindahState.nim, dosenId, alasan);
+  if (!terpilih) {
+    $('#pindahErr').textContent = 'Pilih dosen tujuan terlebih dahulu.';
+    return;
   }
-
-  if (!r.ok) {
-    $('#pindahErr').textContent = r.msg;
+  if (alasan.length < 10) {
+    $('#pindahErr').textContent = 'Alasan pemindahan minimal 10 karakter (sekarang ' + alasan.length + ').';
     return;
   }
 
+  tombolSibuk(btn, true, 'Memindahkan...');
+  var r = await Api.post('/koordinator/pengajuan/' + pindahState.id + '/pindahkan', { dosen_tujuan_id: Number(terpilih.value), alasan: alasan });
+  tombolSibuk(btn, false);
+
+  if (!r.ok) {
+    $('#pindahErr').textContent = pesanError(r);
+    return;
+  }
   modalPindah.hide();
-  var kalimat = pindahState.id
-    ? r.p.mhs + ' dipindahkan ke ' + r.baru.nama + '.'
-    : r.baru.nama + ' ditetapkan sebagai Pembimbing 2 ' + r.p.mhs + '.';
-  toast(kalimat + (r.melebihi ? ' Kuota dosen tujuan sudah penuh, jumlah terisi melebihi kuota.' : ''), r.melebihi ? 'warning' : 'success');
+  await DB.segarkan();
+  toast('Pengajuan dipindahkan ke ' + findDosen(terpilih.value).nama + '. Notifikasi dikirim ke mahasiswa dan kedua dosen.', 'success');
 }
 
 
 // ===== IMPOR CSV =====
+var KOLOM_IMPOR = {
+  pengguna: 'Kolom: peran, nama, email, kata_sandi, nim, angkatan, nidn, peminatan (mahasiswa isi nim + angkatan, dosen isi nidn + peminatan)',
+  arsip: 'Kolom: judul, tahun, abstrak (opsional), sumber (opsional). Dipakai untuk pemeriksaan kemiripan judul.'
+};
+
+function jenisImpor() {
+  return $('input[name=jenisImpor]:checked').value;
+}
+
 function initImpor() {
   var dz = $('#dropzone');
   var inp = $('#fileCsv');
 
-  function prosesFile(f) {
+  function syncJenis() {
+    $$('#jenisImpor .chip').forEach(function (c) {
+      c.classList.toggle('on', c.querySelector('input').checked);
+    });
+    $('#kolomImpor').textContent = KOLOM_IMPOR[jenisImpor()];
+  }
+  $$('input[name=jenisImpor]').forEach(function (r) {
+    r.addEventListener('change', syncJenis);
+  });
+  syncJenis();
+
+  async function prosesFile(f) {
     if (!f) return;
     if (!/\.csv$/i.test(f.name)) {
       toast('Berkas harus berformat .csv', 'danger');
       return;
     }
-    var ukuran = Math.round(f.size / 1024 * 10) / 10; // KB, 1 angka di belakang koma
-    $('#fileInfo').innerHTML = `<div class="hint-box mt-3"><i class="bi bi-file-earmark-check me-1"></i><b>${esc(f.name)}</b> (${ukuran} KB) siap diimpor. Di sistem asli, data divalidasi lalu akun dibuat.</div>`;
+
+    var info = $('#fileInfo');
+    info.innerHTML = `<div class="hint-box mt-3"><span class="spinner-border spinner-border-sm me-2"></span>Mengimpor <b>${esc(f.name)}</b>...</div>`;
+
+    var fd = new FormData();
+    fd.append('berkas', f);
+    var r = await Api.post('/koordinator/impor/' + jenisImpor(), fd);
+    inp.value = '';
+
+    if (!r.ok) {
+      info.innerHTML = `<div class="warn-box mt-3"><i class="bi bi-x-circle me-1"></i>${esc(pesanError(r))}</div>`;
+      return;
+    }
+
+    var galat = r.data.galat || [];
+    var tabel = galat.length
+      ? `<div class="mt-2 small"><b>${galat.length} baris dilewati:</b><ul class="mb-0">${galat.slice(0, 20).map(function (g) { return '<li>Baris ' + g.baris + ': ' + esc(g.pesan) + '</li>'; }).join('')}</ul></div>`
+      : '';
+    info.innerHTML = `<div class="${galat.length ? 'warn-box' : 'ok-box'} mt-3"><i class="bi bi-file-earmark-check me-1"></i><b>${esc(f.name)}</b>: ${esc(r.data.pesan)}${tabel}</div>`;
+    DB.segarkan();
   }
 
   dz.onclick = function () {
@@ -564,7 +749,6 @@ function initImpor() {
     prosesFile(inp.files[0]);
   };
 
-  // efek border merah waktu file di-drag ke kotak
   dz.addEventListener('dragover', function (e) {
     e.preventDefault();
     dz.style.borderColor = 'var(--red)';

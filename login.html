@@ -17,7 +17,7 @@
     <small style="opacity:.75">Program Studi S1 Teknologi Informasi · Kampus Surabaya</small>
   </section>
   <section class="login-form"><div class="box">
-    <h2 class="fw-bold mb-1">Masuk</h2><p class="text-muted mb-4">Pilih peran lalu masuk dengan akun Anda.</p>
+    <h2 class="fw-bold mb-1">Masuk</h2><p class="text-muted mb-4">Masuk dengan email, NIM, atau NIDN Anda.</p>
     <div class="warn-box mb-3" id="sesiHabis" hidden><i class="bi bi-clock-history me-1"></i>Sesi Anda berakhir karena tidak aktif lebih dari 120 menit. Silakan masuk kembali.</div>
     <div class="role-tabs tiga" id="tabs"><button class="on" data-role="mhs" data-r="dashboard.html" data-l="NIM atau email">Mahasiswa</button><button data-role="dosen" data-r="dosen.html" data-l="NIDN atau email">Dosen</button><button data-role="koor" data-r="koordinator.html" data-l="Email">Koordinator</button></div>
     <form id="f" novalidate>
@@ -26,62 +26,67 @@
       <div class="input-group mb-2"><input type="password" class="form-control form-control-lg" id="p" placeholder="••••••••" style="font-size:15px"><button class="btn btn-ghost" type="button" id="eye"><i class="bi bi-eye"></i></button></div>
       <div class="invalid-feedback d-block mb-2" id="err"></div>
       <button class="btn btn-red btn-lg w-100 mt-2" style="font-size:15px">Masuk</button>
-      <div class="small text-muted text-center mt-3">Demo: isi bebas, lalu klik Masuk. Sesi berakhir setelah 120 menit tidak aktif.</div>
+      <div class="small text-muted text-center mt-3">Akun contoh (kata sandi <b>rahasia123</b>): mahasiswa <b>1202230013</b>, dosen <b>0412038801</b>, koordinator <b>koordinator@prodi.test</b>. Sesi berakhir setelah 120 menit tidak aktif.</div>
     </form></div></section>
 </div>
+<script src="js/data.js"></script><script src="js/app.js"></script>
 <script>
-  // halaman tujuan & peran setelah login, default nya mahasiswa
-  var target = 'dashboard.html';
-  var peran = 'mhs';
+  // MR-08: login ke backend Laravel (Email/NIM/NIDN + kata sandi), sesi disimpan di server
   var url = new URLSearchParams(location.search);
 
-  // dilempar ke sini karena sesi habis (MR-08)
+  // dilempar ke sini karena sesi habis (120 menit tidak aktif)
   if (url.get('sesi') == 'habis') {
     document.getElementById('sesiHabis').hidden = false;
   }
 
-  // ganti tab peran (mahasiswa / dosen / koordinator)
+  // kalau masih login, langsung ke halaman perannya
+  Api.get('/saya', { bolehTanpaLogin: true }).then(function (r) {
+    if (r.ok && url.get('sesi') != 'habis') {
+      location.replace(HALAMAN_PERAN[PERAN_API[r.data.user.peran]]);
+    }
+  });
+
+  // ganti tab peran (cuma ganti label & contoh, peran asli ditentukan server)
+  var contoh = { mhs: '1202230013', dosen: '0412038801', koor: 'koordinator@prodi.test' };
   document.getElementById('tabs').addEventListener('click', function (e) {
     var btn = e.target.closest('button');
     if (!btn) return;
-
-    var semuaTab = document.querySelectorAll('#tabs button');
-    for (var i = 0; i < semuaTab.length; i++) {
-      semuaTab[i].classList.toggle('on', semuaTab[i] === btn);
-    }
-
-    target = btn.dataset.r;
-    peran = btn.dataset.role;
+    document.querySelectorAll('#tabs button').forEach(function (b) {
+      b.classList.toggle('on', b === btn);
+    });
     document.getElementById('lbl').textContent = btn.dataset.l;
+    document.getElementById('u').placeholder = 'Contoh: ' + contoh[btn.dataset.role];
   });
 
   // tombol mata buat liat password
   document.getElementById('eye').onclick = function () {
     var pass = document.getElementById('p');
-    if (pass.type == 'password') {
-      pass.type = 'text';
-    } else {
-      pass.type = 'password';
-    }
+    pass.type = pass.type == 'password' ? 'text' : 'password';
   };
 
-  // submit login (masih demo, diisi apa aja bisa masuk)
-  document.getElementById('f').onsubmit = function (e) {
+  document.getElementById('f').onsubmit = async function (e) {
     e.preventDefault();
-
+    var err = document.getElementById('err');
     var user = document.getElementById('u').value.trim();
     var pass = document.getElementById('p').value;
+    err.textContent = '';
 
     if (user == '' || pass == '') {
-      document.getElementById('err').textContent = 'Isi akun dan kata sandi terlebih dahulu.';
+      err.textContent = 'Isi akun dan kata sandi terlebih dahulu.';
       return;
     }
 
-    // simpan sesi: peran + waktu aktif terakhir
-    try {
-      localStorage.setItem('sd_sesi', JSON.stringify({ role: peran, last: Date.now() }));
-    } catch (err) {}
+    var tombol = document.querySelector('#f button.btn-red');
+    tombolSibuk(tombol, true, 'Memeriksa...');
+    var r = await Api.post('/login', { identitas: user, kata_sandi: pass }, { bolehTanpaLogin: true });
+    tombolSibuk(tombol, false);
 
-    location.href = target;
+    if (!r.ok) {
+      err.textContent = r.status == 429 ? 'Terlalu banyak percobaan. Coba lagi dalam 1 menit.' : pesanError(r);
+      return;
+    }
+
+    await Api.csrf(true); // sesi baru = token CSRF baru
+    location.href = HALAMAN_PERAN[PERAN_API[r.data.user.peran]];
   };
 </script></body></html>

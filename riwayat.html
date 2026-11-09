@@ -16,6 +16,7 @@
 <script src="js/data.js"></script><script src="js/app.js"></script>
 <script src="js/mahasiswa.js"></script>
 <script>
-  bootMhs('riwayat');
-  mountRiwayat({ body: $('#body'), chips: $('#chips') });
+  bootMhs('riwayat').then(function (ok) {
+    if (ok) mountRiwayat({ body: $('#body'), chips: $('#chips') });
+  });
 </script></body></html>

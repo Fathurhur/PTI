@@ -7,68 +7,99 @@
 <link href="css/style.css" rel="stylesheet">
 </head><body>
 <div id="app-nav"></div>
+
 <main class="page">
   <section class="view" id="rekap">
     <div class="d-flex align-items-center flex-wrap gap-2 mb-3"><h2 class="sec-title mb-0"><i class="bi bi-bar-chart"></i>Rekap beban dosen</h2>
       <div class="ms-auto d-flex gap-2 flex-wrap"><button class="btn btn-red" onclick="bukaTambahDosen()"><i class="bi bi-person-plus me-1"></i>Tambah dosen</button>
         <button class="btn btn-ghost" onclick="exportCSV()"><i class="bi bi-filetype-csv me-1"></i>Ekspor CSV</button></div></div>
     <div class="row g-3 mb-4" id="stats"></div>
-    <div class="card-x pad"><div class="d-flex justify-content-between flex-wrap gap-2 mb-2"><b>Pemerataan beban per dosen</b>
+    <div class="card-x pad mb-4"><div class="d-flex justify-content-between flex-wrap gap-2 mb-2"><b>Pemerataan beban per dosen</b>
       <span class="small text-muted"><span style="color:var(--green)">●</span> aman &nbsp;<span style="color:#E3A400">●</span> ≥75% &nbsp;<span style="color:var(--red)">●</span> penuh</span></div><div id="bars"></div></div>
+    <div class="card-x pad"><b class="d-block mb-2">Sebaran slot per peminatan (Pembimbing 1)</b><div id="rekapPeminatan"></div></div>
   </section>
 
   <section class="view" id="periode">
     <div class="row g-4">
-      <div class="col-lg-4"><h2 class="sec-title"><i class="bi bi-calendar-range"></i>Periode</h2>
-        <div class="card-x pad">
-          <div class="d-flex justify-content-between align-items-center mb-3"><b>Ganjil 2026/2027</b><span id="pStatus"></span></div>
-          <label class="form-label fw-bold">Tanggal mulai</label><input type="date" class="form-control mb-3" id="pMulai">
-          <label class="form-label fw-bold">Tanggal selesai</label><input type="date" class="form-control mb-3" id="pSelesai">
-          <div class="small text-muted mb-3">Pengajuan di luar periode ditolak sistem.</div>
-          <button class="btn btn-ghost w-100 mb-2" onclick="simpanPeriode()"><i class="bi bi-save me-1"></i>Simpan tanggal</button>
-          <button class="btn btn-red w-100" id="btnPeriode" onclick="bukaTutupPeriode()"></button></div></div>
+      <div class="col-lg-4">
+        <h2 class="sec-title"><i class="bi bi-calendar-range"></i>Periode</h2>
+        <div class="card-x pad" id="periodeCard"></div>
+        <h2 class="sec-title mt-4"><i class="bi bi-diagram-3"></i>Kuota peminatan &amp; kemiripan</h2>
+        <div class="card-x pad" id="peminatanCard"></div>
+      </div>
       <div class="col-lg-8"><div class="d-flex align-items-center flex-wrap gap-2 mb-2"><h2 class="sec-title mb-0"><i class="bi bi-sliders"></i>Kuota &amp; status dosen</h2>
           <div class="ms-auto d-flex gap-2 flex-wrap"><button class="btn btn-ghost btn-sm" onclick="setMenerimaSemua(true)"><i class="bi bi-toggle-on me-1"></i>Terima semua</button>
             <button class="btn btn-ghost btn-sm text-danger" onclick="setMenerimaSemua(false)"><i class="bi bi-toggle-off me-1"></i>Nonaktifkan semua</button></div></div>
-        <div class="card-x"><div style="overflow-x:auto"><table class="table-x"><thead><tr><th>Dosen</th><th>Kuota Pembimbing 1 (0–20)</th><th>Kuota Pembimbing 2 (0–20)</th><th>Menerima bimbingan</th></tr></thead><tbody id="kuotaBody"></tbody></table></div>
-          <div class="p-3 border-top d-flex justify-content-between align-items-center flex-wrap gap-2"><span class="small text-muted">Kuota awal 6 untuk Pembimbing 1 dan 6 untuk Pembimbing 2 (total 12 per dosen). Sisa kuota dihitung terpisah dan tidak boleh di bawah jumlah yang sudah terisi.</span><button class="btn btn-red" onclick="simpanKuota()">Simpan kuota</button></div></div></div>
+        <div class="card-x"><div style="overflow-x:auto"><table class="table-x"><thead><tr><th>Dosen</th><th>Kuota Pembimbing 1 (0–20)</th><th>Kuota Pembimbing 2 (0–20)</th><th>Menerima bimbingan</th><th></th></tr></thead><tbody id="kuotaBody"></tbody></table></div>
+          <div class="p-3 border-top d-flex justify-content-between align-items-center flex-wrap gap-2"><span class="small text-muted">Kuota dasar dihitung otomatis saat periode dibuka (mahasiswa Penulisan Proposal ÷ dosen aktif, dibulatkan ke atas). Kuota tidak boleh di bawah jumlah yang sudah terisi. Slot tambahan dicatat di log beserta alasannya.</span><button class="btn btn-red" onclick="simpanKuota(this)">Simpan kuota</button></div></div></div>
     </div>
   </section>
 
   <section class="view" id="penetapan">
     <div class="d-flex align-items-center flex-wrap gap-2 mb-2"><h2 class="sec-title mb-0"><i class="bi bi-patch-check"></i>Penetapan pembimbing</h2><span class="small text-muted ms-auto" id="sahCount"></span></div>
-    <div class="hint-box mb-3"><i class="bi bi-info-circle me-1"></i>Koordinator dapat langsung <b>menetapkan</b> pengajuan yang masih menunggu dosen, atau <b>memindahkan</b> Pembimbing 1 maupun Pembimbing 2 setiap mahasiswa ke dosen mana saja sesuai keputusan prodi, tanpa persetujuan dosen, walaupun kuota dosen tujuan sudah penuh.</div>
-    <div class="search mb-3"><i class="bi bi-search"></i><input class="form-control" placeholder="Cari nama, NIM, atau judul mahasiswa..." oninput="cariSah(this.value)"></div>
+    <div class="hint-box mb-3"><i class="bi bi-info-circle me-1"></i>Pengajuan yang sudah <b>diterima dosen</b> disahkan di sini dan sistem menerbitkan <b>surat penetapan PDF</b> bernomor unik. Pengajuan yang masih <b>menunggu dosen</b> dapat <b>dipindahkan</b> ke dosen lain yang masih punya slot pada peran (dan peminatan) yang sama, dengan alasan yang tercatat di log.</div>
+    <div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+      <div class="search flex-grow-1"><i class="bi bi-search"></i><input class="form-control" placeholder="Cari nama, NIM, atau judul mahasiswa..." oninput="cariSah(this.value)"></div>
+      <div class="d-flex gap-2" id="sahFilter"></div>
+    </div>
     <div class="row g-3" id="sahList"></div>
   </section>
 
   <section class="view" id="impor">
-    <h2 class="sec-title"><i class="bi bi-upload"></i>Impor data pengguna (CSV)</h2>
-    <div class="card-x pad"><div id="dropzone" class="text-center p-5 rounded-4" style="border:2px dashed #CBD0D8;cursor:pointer;background:#FAFAFB">
-      <i class="bi bi-cloud-arrow-up" style="font-size:40px;color:var(--red)"></i><div class="fw-bold mt-2">Tarik berkas CSV ke sini atau klik untuk memilih</div>
-      <div class="small text-muted">Kolom: nim/nidn, nama, email, peran</div><input type="file" id="fileCsv" accept=".csv" hidden></div><div id="fileInfo"></div></div>
+    <h2 class="sec-title"><i class="bi bi-upload"></i>Impor data (CSV)</h2>
+    <div class="card-x pad">
+      <div class="d-flex gap-2 flex-wrap mb-3" id="jenisImpor">
+        <label class="chip on"><input type="radio" name="jenisImpor" value="pengguna" class="d-none" checked><i class="bi bi-people"></i> Data pengguna (mahasiswa &amp; dosen)</label>
+        <label class="chip"><input type="radio" name="jenisImpor" value="arsip" class="d-none"><i class="bi bi-archive"></i> Arsip judul TA angkatan sebelumnya</label>
+      </div>
+      <div id="dropzone" class="text-center p-5 rounded-4" style="border:2px dashed #CBD0D8;cursor:pointer;background:#FAFAFB">
+        <i class="bi bi-cloud-arrow-up" style="font-size:40px;color:var(--red)"></i><div class="fw-bold mt-2">Tarik berkas CSV ke sini atau klik untuk memilih</div>
+        <div class="small text-muted" id="kolomImpor"></div><input type="file" id="fileCsv" accept=".csv" hidden></div>
+      <div id="fileInfo"></div></div>
   </section>
 </main>
 
+<!-- modal pindahkan pengajuan (MR-07) -->
 <div class="modal fade" id="mPindah" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
   <div class="modal-header"><h5 class="modal-title fw-bold" id="pindahJudul">Pindahkan pembimbing</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
   <div class="modal-body">
     <div id="pindahInfo" class="mb-3"></div>
     <label class="form-label fw-bold">Pilih dosen tujuan</label>
     <div class="pick-list mb-3" id="pindahDaftar"></div>
-    <label class="form-label fw-bold">Dasar keputusan prodi</label><textarea id="pindahAlasan" class="form-control" rows="3" placeholder="Contoh: Hasil rapat prodi tanggal ... (min. 10 karakter)"></textarea>
-    <div class="small text-muted mt-2">Persetujuan dosen tidak diperlukan. Kuota dosen tujuan yang sudah penuh tetap bisa dipilih, jumlah terisinya akan melebihi kuota.</div>
+    <label class="form-label fw-bold">Alasan pemindahan</label><textarea id="pindahAlasan" class="form-control" rows="3" placeholder="Contoh: Pemerataan beban dosen hasil rapat prodi (min. 10 karakter)"></textarea>
+    <div class="small text-muted mt-2">Hanya pengajuan berstatus Menunggu yang dapat dipindahkan. Slot dosen asal dilepas, slot dosen tujuan dikunci, dan notifikasi dikirim ke mahasiswa, dosen asal, dan dosen tujuan.</div>
     <div class="invalid-feedback d-block" id="pindahErr"></div></div>
-  <div class="modal-footer"><button class="btn btn-ghost" data-bs-dismiss="modal">Batal</button><button class="btn btn-red" id="pindahSubmit" onclick="kirimPindah()">Pindahkan</button></div></div></div></div>
+  <div class="modal-footer"><button class="btn btn-ghost" data-bs-dismiss="modal">Batal</button><button class="btn btn-red" id="pindahSubmit" onclick="kirimPindah(this)">Pindahkan</button></div></div></div></div>
 
-<div class="modal fade" id="mTambahDosen" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
-  <div class="modal-header"><div><h5 class="modal-title fw-bold">Tambah dosen pembimbing</h5><div class="small text-muted">Dosen baru langsung muncul di daftar mahasiswa sesuai kuota yang diatur.</div></div><button class="btn-close" data-bs-dismiss="modal"></button></div>
+<!-- modal slot tambahan (MR-07) -->
+<div class="modal fade" id="mSlot" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+  <div class="modal-header"><div><h5 class="modal-title fw-bold">Beri slot tambahan</h5><div class="small text-muted" id="slotDosen"></div></div><button class="btn-close" data-bs-dismiss="modal"></button></div>
   <div class="modal-body">
-    <label class="form-label fw-bold">Nama lengkap dan gelar</label><input id="tdNama" class="form-control mb-3" maxlength="120" placeholder="Contoh: Dr. Nama Dosen, S.Kom., M.T.">
-    <label class="form-label fw-bold">NIDN</label><input id="tdNidn" class="form-control mb-3" inputmode="numeric" maxlength="10" placeholder="10 digit angka">
+    <div class="row g-3 mb-3">
+      <div class="col-6"><label class="form-label fw-bold">Peran</label><select id="slotPeran" class="form-select"><option value="1">Pembimbing 1</option><option value="2">Pembimbing 2</option></select></div>
+      <div class="col-6"><label class="form-label fw-bold">Jumlah slot</label><input id="slotJumlah" type="number" min="1" max="20" value="1" class="form-control"></div>
+    </div>
+    <label class="form-label fw-bold">Alasan</label><textarea id="slotAlasan" class="form-control" rows="3" placeholder="Contoh: Masih ada mahasiswa IoT tanpa pembimbing (min. 10 karakter)"></textarea>
+    <div class="small text-muted mt-2">Dashboard menampilkan label "kuota + tambahan", dosen menerima notifikasi, dan antrean pada dosen ini langsung dipanggil.</div>
+    <div class="invalid-feedback d-block" id="slotErr"></div></div>
+  <div class="modal-footer"><button class="btn btn-ghost" data-bs-dismiss="modal">Batal</button><button class="btn btn-red" onclick="kirimSlot(this)">Beri slot</button></div></div></div></div>
+
+<!-- modal tambah dosen -->
+<div class="modal fade" id="mTambahDosen" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
+  <div class="modal-header"><div><h5 class="modal-title fw-bold">Tambah dosen pembimbing</h5><div class="small text-muted">Akun dosen dibuat dan langsung muncul di daftar mahasiswa sesuai kuota yang diatur.</div></div><button class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <label class="form-label fw-bold">Nama lengkap dan gelar</label><input id="tdNama" class="form-control mb-3" maxlength="100" placeholder="Contoh: Dr. Nama Dosen, S.Kom., M.T.">
+    <div class="row g-3 mb-3">
+      <div class="col-6"><label class="form-label fw-bold">NIDN</label><input id="tdNidn" class="form-control" inputmode="numeric" maxlength="10" placeholder="10 digit angka"></div>
+      <div class="col-6"><label class="form-label fw-bold">Peminatan utama</label><select id="tdPeminatan" class="form-select"><option>IoT</option><option>AI</option><option>Cyber</option></select></div>
+    </div>
+    <div class="row g-3 mb-3">
+      <div class="col-6"><label class="form-label fw-bold">Email</label><input id="tdEmail" type="email" class="form-control" placeholder="nama@kampus.ac.id"></div>
+      <div class="col-6"><label class="form-label fw-bold">Kata sandi awal</label><input id="tdSandi" type="text" class="form-control" placeholder="Minimal 8 karakter"></div>
+    </div>
     <label class="form-label fw-bold">Bidang keahlian <span class="text-muted fw-normal">(pilih minimal satu)</span></label>
     <div class="d-flex flex-wrap gap-2 mb-3" id="tdBidang"></div>
-    <label class="form-label fw-bold">Kata kunci keahlian <span class="text-muted fw-normal">(pisahkan dengan koma, opsional)</span></label>
+    <label class="form-label fw-bold">Kata kunci keahlian <span class="text-muted fw-normal">(pisahkan dengan koma, maks. 10)</span></label>
     <input id="tdKata" class="form-control mb-3" placeholder="Contoh: machine learning, computer vision">
     <div class="row g-3 mb-3">
       <div class="col-6"><label class="form-label fw-bold">Kuota Pembimbing 1</label><input id="tdKuota1" type="number" min="0" max="20" class="form-control"></div>
@@ -76,28 +107,19 @@
     </div>
     <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="tdMenerima" checked><label class="form-check-label" for="tdMenerima">Langsung menerima bimbingan</label></div>
     <div class="invalid-feedback d-block mt-2" id="tdErr"></div></div>
-  <div class="modal-footer"><button class="btn btn-ghost" data-bs-dismiss="modal">Batal</button><button class="btn btn-red" onclick="simpanDosenBaru()">Simpan dosen</button></div></div></div></div>
+  <div class="modal-footer"><button class="btn btn-ghost" data-bs-dismiss="modal">Batal</button><button class="btn btn-red" onclick="simpanDosenBaru(this)">Simpan dosen</button></div></div></div></div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="js/data.js"></script><script src="js/app.js"></script>
 <script src="js/koordinator.js"></script>
 <script>
-  if (buildShell('koor', 'rekap')) {
+  siapkan('koor', 'rekap').then(function (ok) {
+    if (!ok) return;
     initViews('rekap');
-
-    drawRekap();
-    drawKuota();
-    isiTanggalPeriode();
-    drawPeriode();
-    drawSah();
+    gambarSemua();
     initImpor();
-
-    // gambar ulang kalau data berubah (misal dosen baru nerima mahasiswa)
-    document.addEventListener('pengajuan:changed', function () {
-      drawRekap();
-      drawKuota();
-      drawPeriode();
-      drawSah();
-    });
-  }
+    Live.start();
+    // gambar ulang tiap polling 5 detik
+    document.addEventListener('pengajuan:changed', gambarSemua);
+  });
 </script></body></html>

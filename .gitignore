@@ -1,0 +1,10 @@
+# pengaturan lokal editor / Claude Code (berisi path khusus laptop masing-masing)
+.claude/
+.vscode/
+.idea/
+
+# berkas sistem
+Thumbs.db
+.DS_Store
+
+# backend: vendor, .env, cache, dll. sudah diatur di backend/.gitignore

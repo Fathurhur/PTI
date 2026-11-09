@@ -18,25 +18,17 @@
     </div>
   </div>
 </main>
+<script src="js/data.js"></script><script src="js/app.js"></script>
 <script>
-  // halaman utama sesuai peran di sesi
-  var HALAMAN = { mhs: 'dashboard.html', dosen: 'dosen.html', koor: 'koordinator.html' };
+  // halaman utama sesuai peran akun yang sedang login (dicek ke server)
   var NAMA_PERAN = { mhs: 'mahasiswa', dosen: 'dosen', koor: 'koordinator' };
-
-  var sesi = null;
-  try {
-    sesi = JSON.parse(localStorage.getItem('sd_sesi'));
-  } catch (e) {}
-
-  if (sesi && HALAMAN[sesi.role]) {
-    document.getElementById('btnKembali').href = HALAMAN[sesi.role];
-    document.getElementById('peranTxt').textContent = ' (' + NAMA_PERAN[sesi.role] + ')';
-  }
-
+  Api.get('/saya', { bolehTanpaLogin: true }).then(function (r) {
+    if (!r.ok) return;
+    var peran = PERAN_API[r.data.user.peran];
+    document.getElementById('btnKembali').href = HALAMAN_PERAN[peran];
+    document.getElementById('peranTxt').textContent = ' (' + NAMA_PERAN[peran] + ')';
+  });
   document.getElementById('btnGanti').onclick = function () {
-    try {
-      localStorage.removeItem('sd_sesi');
-    } catch (e) {}
-    location.href = 'login.html';
+    keluar();
   };
 </script></body></html>

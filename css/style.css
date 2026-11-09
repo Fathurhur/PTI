@@ -615,6 +615,11 @@ h6 {
   color: var(--green);
 }
 
+.sb-Antrean {
+  background: #FFF4D6;
+  color: #8A5A00;
+}
+
 .sb-Ditolak {
   background: var(--red-soft);
   color: var(--red-dark);
