@@ -1,4 +1,4 @@
-# Sistem Dosen Pembimbing TA/Skripsi
+# Sistem Informasi Ketersediaan Dosen Pembimbing TA/Skripsi Real-Time
 
 Aplikasi web (HTML + Bootstrap 5 + JavaScript) yang tersambung ke backend **Laravel 11 + MySQL** di folder [`backend/`](backend/README.md). Semua data (dosen, kuota, pengajuan, antrean, notifikasi, periode) disimpan di database, bukan di localStorage.
 
