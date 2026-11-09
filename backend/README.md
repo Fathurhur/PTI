@@ -65,7 +65,7 @@ Tanpa terminal 3, kedaluwarsa tetap diproses paling lama sekali per menit setiap
 | Dosen | NIDN, misalnya `0412038801` (Dr. Khodijah, IoT), `0410118804` (Yohanes, AI), `0420068503` (Philip, Cyber) |
 | Mahasiswa | NIM, misalnya `1202230013` (Muhammad Fathurrohman, belum punya pembimbing) |
 
-Kondisi data contoh: kuota P1 Dr. Helmy dibuat penuh untuk demo antrean, Mustafa Kamal berstatus tidak menerima, dan ada 1 pengajuan Menunggu.
+Kondisi data contoh: kuota P1 Dr. Helmy dibuat 2 (penuh) untuk demo antrean, Mustafa Kamal berstatus tidak menerima, ada 1 pengajuan Menunggu, dan tiap dosen memiliki saran judul (`SaranJudulSeeder`). Saran judul bisa ditambahkan ke database yang sudah berjalan dengan `php artisan db:seed --class=SaranJudulSeeder` (aman diulang, tidak menggandakan).
 
 ## Pengujian
 
@@ -73,7 +73,7 @@ Kondisi data contoh: kuota P1 Dr. Helmy dibuat penuh untuk demo antrean, Mustafa
 php artisan test
 ```
 
-Ada 21 uji black-box untuk MR-01 sampai MR-10, ditambah uji penyajian frontend (termasuk memastikan folder backend tidak bisa diakses). Pengujian memakai SQLite in-memory, jadi database MySQL tidak tersentuh.
+Ada 22 uji untuk MR-01 sampai MR-10 (termasuk aturan satu saran judul untuk satu mahasiswa), ditambah uji penyajian frontend (termasuk memastikan folder backend tidak bisa diakses). Pengujian dirancang memakai SQLite in-memory (`phpunit.xml`), tetapi **bila ada cache konfigurasi (`bootstrap/cache/config.php`), pengaturan itu diabaikan dan tes bisa menjalankan `migrate:fresh` ke MySQL asli** serta menghapus datanya. Jalankan `php artisan config:clear` sebelum menguji, atau paksa lewat environment: `DB_CONNECTION=sqlite DB_DATABASE=:memory: php artisan test`.
 
 ## Cara memanggil API
 
@@ -97,20 +97,20 @@ await fetch('/api/login', {
 | Metode & URL | Peran | MR |
 |---|---|---|
 | `POST /api/login`, `POST /api/logout`, `GET /api/saya` | semua | 08 |
-| `GET /api/dashboard?bidang=&peminatan=&status=` (polling 5 detik) | semua | 01, 10 |
+| `GET /api/dashboard?bidang=&peminatan=&status=` (polling 5 detik, termasuk saran judul tiap dosen dan ketersediaannya) | semua | 01, 02, 10 |
 | `GET /api/dosen/{id}` (profil) | semua | 02 |
 | `GET /api/notifikasi`, `POST /api/notifikasi/{id}/baca`, `POST /api/notifikasi/baca-semua` | semua | 05 |
 | `GET /api/pengajuan`, `GET /api/pengajuan/{id}` (disaring sesuai peran) | semua | 03, 08 |
 | `GET /api/pengajuan/{id}/surat` (PDF) | pemilik, dosen, koordinator | 07 |
 | `POST /api/rekomendasi` | mahasiswa | 06 |
-| `POST /api/cek-kemiripan` | mahasiswa | 09 |
-| `POST /api/pengajuan` | mahasiswa | 03, 04, 09, 10 |
+| `POST /api/cek-kemiripan` (judul + abstrak dicocokkan dengan arsip judul dan pengajuan aktif, ambang tetap 80%) | mahasiswa | 09 |
+| `POST /api/pengajuan` (`dosen_id`, `peran`, `judul`, `abstrak`, opsional `saran_judul_id`; kode galat `saran_diambil` bila saran sudah dipakai) | mahasiswa | 03, 04, 09 |
 | `POST /api/antrean`, `GET /api/antrean` | mahasiswa | 05 |
 | `POST /api/pengajuan/{id}/putuskan` (`terima`/`tolak` + `alasan`) | dosen | 03 |
 | `GET/PUT /api/dosen-saya/profil`, `POST/PUT/DELETE /api/dosen-saya/saran-judul/{id}`, `GET /api/dosen-saya/bimbingan` | dosen | 02 |
-| `GET/POST /api/koordinator/periode`, `PUT .../periode/{id}` (tanggal), `POST .../periode/{id}/tutup` | koordinator | 07, 09 |
+| `GET/POST /api/koordinator/periode`, `PUT .../periode/{id}` (tanggal), `POST .../periode/{id}/tutup` | koordinator | 07 |
 | `POST /api/koordinator/dosen` (tambah dosen), `PUT .../dosen/{id}/menerima` | koordinator | 07 |
-| `PUT /api/koordinator/dosen/{id}/kuota`, `POST .../dosen/{id}/slot-tambahan` | koordinator | 07, 10 |
+| `PUT /api/koordinator/dosen/{id}/kuota`, `POST .../dosen/{id}/slot-tambahan` | koordinator | 07 |
 | `POST /api/koordinator/pengajuan/{id}/pindahkan`, `POST .../pengajuan/{id}/sahkan` | koordinator | 07 |
 | `GET /api/koordinator/rekap`, `GET .../rekap.csv`, `GET .../log` | koordinator | 07 |
 | `POST /api/koordinator/impor/arsip` (CSV: `judul,tahun,abstrak,sumber`) | koordinator | 09 |
@@ -123,14 +123,20 @@ Lihat semua route dengan `php artisan route:list --path=api`.
 | MR | File |
 |---|---|
 | 01 Dashboard real-time | `app/Services/DashboardService.php`, `UmumController@dashboard` |
-| 02 Profil dosen | `Api/DosenController.php` |
-| 03 Pengajuan & keputusan | `app/Services/PengajuanService.php`, `Api/PengajuanController.php` |
-| 04 Cegah rebutan slot | `PeminatanService::ambilSlotAtomik()` (SELECT ... FOR UPDATE) |
+| 02 Profil dosen & saran judul | `Api/DosenController.php`, `Models/SaranJudul.php`, `database/seeders/SaranJudulSeeder.php` |
+| 03 Pengajuan & keputusan (termasuk kunci satu saran judul untuk satu mahasiswa) | `app/Services/PengajuanService.php`, `Api/PengajuanController.php` |
+| 04 Cegah rebutan slot | `PeminatanService::ambilSlotAtomik()` (SELECT ... FOR UPDATE pada kuota dosen) |
 | 05 Antrean & notifikasi | `AntreanService.php`, `PengajuanService::promosikanAntrean()`, `NotifikasiService.php`, `Jobs/KirimEmailNotifikasi.php` |
-| 06 Rekomendasi dosen | `TfIdfService::rekomendasiDosen()` |
+| 06 Rekomendasi dosen (dari judul, abstrak, keahlian, dan saran judul dosen) | `TfIdfService::rekomendasiDosen()` |
 | 07 Administrasi | `KoordinatorService.php`, `SuratPenetapanService.php`, `Api/KoordinatorController.php`, `resources/views/surat/penetapan.blade.php` |
 | 08 Hak akses | `AutentikasiService.php`, `Http/Middleware/CekIzin.php`, `Api/AuthController.php` |
-| 09 Kemiripan judul | `KemiripanJudulService.php` |
-| 10 Peminatan & kuota bidang | `PeminatanService.php` |
+| 09 Kemiripan judul & abstrak terhadap arsip judul | `KemiripanJudulService.php`, `Models/ArsipJudul.php` |
+| 10 Peminatan dosen (label dan filter; kuota per peminatan sudah dihapus) | `PeminatanService.php` |
 
-Struktur tabel mengikuti ERD SRS (`database/migrations/2026_11_09_000001_create_tabel_sistem_ta.php`). Satu-satunya tambahan adalah tabel `log_aktivitas`, untuk mencatat slot tambahan, pemindahan, dan perubahan kuota.
+Struktur tabel mengikuti ERD SRS (`database/migrations/2026_11_09_000001_create_tabel_sistem_ta.php`), dengan tambahan tabel `log_aktivitas` untuk mencatat slot tambahan, pemindahan, dan perubahan kuota.
+
+Perubahan setelah SRS awal (migrasi `2026_11_10_*`, aman dijalankan pada database lama):
+
+- `..._000001_hapus_topik`: hapus tabel `topik_dosen` dan kolom `pengajuan.topik_id` / `asal_topik`, `arsip_topik` diganti nama menjadi `arsip_judul`.
+- `..._000002_hapus_kuota_peminatan`: hapus tabel `kuota_peminatan`. Kuota kini hanya per dosen per peran; endpoint ubah ambang dan kuota peminatan ikut dihapus (ambang kemiripan tetap 80%).
+- `..._000003_buat_saran_judul`: tabel `saran_judul` (judul dan deskripsi per dosen) dan kolom `pengajuan.saran_judul_id` yang menandai saran yang sedang dipakai.

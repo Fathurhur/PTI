@@ -1,6 +1,6 @@
 # Sistem Informasi Ketersediaan Dosen Pembimbing TA/Skripsi Real-Time
 
-Aplikasi web (HTML + Bootstrap 5 + JavaScript) yang tersambung ke backend **Laravel 11 + MySQL** di folder [`backend/`](backend/README.md). Semua data (dosen, kuota, pengajuan, antrean, notifikasi, periode) disimpan di database, bukan di localStorage.
+Aplikasi web untuk melihat ketersediaan dosen pembimbing secara real-time, mengajukan Pembimbing 1 dan 2 dengan judul dan abstrak, dan mengelola kuota dosen oleh koordinator. Dibuat dengan HTML + Bootstrap 5 + JavaScript yang tersambung ke backend **Laravel 11 + MySQL** di folder [`backend/`](backend/README.md). Semua data (dosen, kuota, pengajuan, antrean, notifikasi, periode) disimpan di database, bukan di localStorage.
 
 ## Menjalankan
 
@@ -22,19 +22,20 @@ Halaman frontend disajikan oleh Laravel supaya halaman dan API ada di origin yan
 | Dosen | NIDN `0412038801` (Dr. Khodijah, IoT), `0410118804` (Yohanes, AI), `0420068503` (Philip, Cyber) |
 | Koordinator | `koordinator@prodi.test` |
 
-Untuk mengembalikan data ke kondisi awal, jalankan `php artisan migrate:fresh --seed` di folder `backend`.
+Untuk mengembalikan data ke kondisi awal, jalankan `php artisan migrate:fresh --seed` di folder `backend`. Data contoh sudah berisi beberapa pengajuan. Untuk tampilan bersih (tanpa pengajuan dan antrean, semua kuota dosen terisi 0), kosongkan tabel `pengajuan`, `antrean`, `notifikasi`, dan `log_aktivitas`, lalu set `kuota_dosen.terisi = 0`. Akun, saran judul, dan arsip judul tidak perlu diubah.
 
 ## Peran dan fitur
 
 | Peran | Halaman | Fitur |
 |---|---|---|
-| Mahasiswa | `dashboard.html`, `cari.html`, `pengajuan.html`, `riwayat.html` | Slot dosen real-time (polling 5 detik), rekomendasi dosen TF-IDF, cek kemiripan judul langsung saat mengetik, ajukan Pembimbing 1 dan 2, masuk antrean bila slot penuh, pantau status, unduh surat penetapan |
+| Mahasiswa | `dashboard.html`, `cari.html`, `pengajuan.html`, `riwayat.html` | Slot dosen real-time (polling 5 detik), rekomendasi dosen TF-IDF dari judul dan abstrak, melihat dan memakai saran judul dosen, cek kemiripan judul langsung saat mengetik, ajukan Pembimbing 1 dan 2, masuk antrean bila slot penuh, pantau status, unduh surat penetapan |
 | Dosen | `dosen.html` | Terima atau tolak pengajuan (alasan minimal 10 karakter), lihat bimbingan dan sisa kuota, kelola profil, peminatan, kata kunci, saran judul, dan status menerima |
 | Koordinator | `koordinator.html` | Rekap beban dosen, ekspor CSV, tambah dosen, buka/tutup/ubah periode, kuota dosen per peran, slot tambahan, sahkan penetapan dan terbitkan surat PDF, pindahkan pengajuan, impor CSV pengguna dan arsip judul |
 
 ## Alur utama (sesuai SRS)
 
-1. **Mahasiswa** mengajukan Pembimbing 1. Peminatan mengikuti peminatan utama dosen. Judul diperiksa kemiripannya, lalu slot dosen dikunci dalam satu transaksi. Status menjadi **Menunggu**.
+1. **Mahasiswa** mengajukan Pembimbing 1 dengan mengisi **judul dan abstrak**. Peminatan mengikuti peminatan utama dosen. Setelah memilih dosen, mahasiswa bisa memakai salah satu **saran judul** milik dosen itu (judul terisi otomatis, abstrak tetap ditulis sendiri) atau menulis judul sendiri. Judul sendiri dicocokkan otomatis (TF-IDF) dengan arsip judul dan pengajuan aktif; kemiripan 80% atau lebih ditolak. Lalu slot dosen dikunci dalam satu transaksi dan status menjadi **Menunggu**.
+   - Satu saran judul hanya bisa dipakai **satu mahasiswa** (yang pertama mengajukan). Saran dilepas lagi bila pengajuannya ditolak atau kedaluwarsa. Saran judul tidak diperiksa kemiripannya.
 2. Bila slot dosen penuh, mahasiswa bisa **masuk antrean**. Saat slot terbuka (pengajuan ditolak, kedaluwarsa, kuota dinaikkan, atau ada slot tambahan), mahasiswa pertama di antrean dipromosikan otomatis.
 3. **Dosen** menerima (status **Diterima**) atau menolak dengan alasan. Pengajuan tanpa keputusan selama 7 × 24 jam menjadi **Kedaluwarsa** dan slotnya dilepas.
 4. **Koordinator** mengesahkan pengajuan yang sudah Diterima. Statusnya menjadi **Ditetapkan** dan sistem menerbitkan surat `SP-TA/<periode>/<urut>` dalam format PDF.
