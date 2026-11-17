@@ -31,7 +31,14 @@
             <div class="form-check form-switch fs-4 m-0"><input class="form-check-input" type="checkbox" id="swTerima" onchange="setMenerima(this.checked)"></div></div>
           <label class="form-label fw-bold">Nama <span class="text-muted fw-normal">(maks. 100 karakter)</span></label><input class="form-control mb-3" id="pNama" maxlength="100">
           <label class="form-label fw-bold">NIDN</label><input class="form-control mb-3" id="pNidn" readonly>
-          <label class="form-label fw-bold">Peminatan utama <span class="text-muted fw-normal">(menentukan Pembimbing 1)</span></label><select class="form-select mb-3" id="pPeminatan"></select>
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <label class="form-label fw-bold mb-0">Peminatan utama <span class="text-muted fw-normal">(menentukan Pembimbing 1)</span></label>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="bukaTambahPeminatan()"><i class="bi bi-plus-lg me-1"></i>Tambah peminatan</button>
+          </div>
+          <select class="form-select mb-3" id="pPeminatan"></select>
+          <div class="mb-3 d-none" id="pPeminatanManualWrap">
+            <input class="form-control" id="pPeminatanManual" maxlength="50" placeholder="Ketik peminatan Anda (maks. 50 karakter)">
+          </div>
           <label class="form-label fw-bold">Bidang keahlian <span class="text-muted fw-normal">(min. 1, boleh lebih dari satu)</span></label>
           <div class="d-flex flex-wrap gap-2 mb-3" id="bidangBox"></div>
           <div class="d-flex justify-content-between"><label class="form-label fw-bold">Kata kunci keahlian</label><span class="wc" id="kwCount"></span></div>
@@ -59,6 +66,13 @@
   <div class="modal-body"><label class="form-label fw-bold">Judul <span class="text-muted fw-normal">(maks. 200 karakter)</span></label><input id="sJudul" maxlength="200" class="form-control mb-3">
     <label class="form-label fw-bold">Deskripsi <span class="text-muted fw-normal">(maks. 1.000 karakter)</span></label><textarea id="sDesk" maxlength="1000" rows="4" class="form-control"></textarea></div>
   <div class="modal-footer"><button class="btn btn-ghost" data-bs-dismiss="modal">Batal</button><button class="btn btn-red" onclick="simpanSaran(this)">Simpan saran judul</button></div></div></div></div>
+
+<div class="modal fade" id="mPeminatan" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title fw-bold">Tambah peminatan</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body"><label class="form-label fw-bold">Nama peminatan <span class="text-muted fw-normal">(maks. 50 karakter)</span></label><input id="pmNama" maxlength="50" class="form-control" placeholder="Contoh: Robotika">
+    <div class="small text-muted mt-2">Peminatan yang ditambahkan muncul di daftar semua dosen. Untuk memakainya sebagai peminatan utama, pilih sendiri dari dropdown.</div>
+    <div class="invalid-feedback d-block" id="pmErr"></div></div>
+  <div class="modal-footer"><button class="btn btn-ghost" data-bs-dismiss="modal">Batal</button><button class="btn btn-red" onclick="simpanPeminatan(this)">Tambah peminatan</button></div></div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="js/data.js"></script><script src="js/app.js"></script>
 <script src="js/dosen.js"></script>

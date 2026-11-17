@@ -42,8 +42,7 @@ class KoordinatorController extends Controller
         protected NotifikasiService $notifikasi,
         protected PengajuanService $pengajuan,
         protected DashboardService $dashboard,
-    ) {
-    }
+    ) {}
 
     // ---------------------------------------------------------
     // Periode
@@ -135,7 +134,7 @@ class KoordinatorController extends Controller
             'nidn'              => ['required', 'digits:10', 'unique:dosen,nidn'],
             'email'             => ['required', 'email', 'max:150', 'unique:users,email'],
             'kata_sandi'        => ['required', 'string', 'min:8', 'max:72'],
-            'peminatan_utama'   => ['required', Rule::in(PeminatanService::DAFTAR_PEMINATAN)],
+            'peminatan_utama'   => ['required', Rule::exists('peminatan', 'nama')],
             'bidang_keahlian'   => ['required', 'array', 'min:1'],
             'bidang_keahlian.*' => ['string', 'max:100'],
             'kata_kunci'        => ['nullable', 'array', 'max:10'],
@@ -147,7 +146,10 @@ class KoordinatorController extends Controller
 
         $dosen = DB::transaction(function () use ($data) {
             $user = User::create([
-                'nama' => $data['nama'], 'email' => $data['email'], 'password' => $data['kata_sandi'], 'role' => 'dosen',
+                'nama' => $data['nama'],
+                'email' => $data['email'],
+                'password' => $data['kata_sandi'],
+                'role' => 'dosen',
             ]);
             $dosen = Dosen::create([
                 'user_id'            => $user->id,
@@ -346,7 +348,7 @@ class KoordinatorController extends Controller
 
         $surat = DB::transaction(function () use ($pengajuan) {
             Periode::lockForUpdate()->find($pengajuan->periode_id); // nomor urut unik per periode
-            $urut = SuratPenetapan::whereHas('pengajuan', fn ($q) => $q->where('periode_id', $pengajuan->periode_id))->count() + 1;
+            $urut = SuratPenetapan::whereHas('pengajuan', fn($q) => $q->where('periode_id', $pengajuan->periode_id))->count() + 1;
             $nomor = $this->surat->generateNomorSurat($pengajuan->periode->kode, $urut);
 
             $berkas = 'surat/' . str_replace('/', '-', $nomor) . '.pdf';
@@ -391,7 +393,7 @@ class KoordinatorController extends Controller
         $periode = $this->periodeAktif();
         $data = $this->dashboard->data($periode);
 
-        $dosen = array_map(fn ($d) => [
+        $dosen = array_map(fn($d) => [
             'nidn'            => $d['nidn'],
             'nama'            => $d['nama'],
             'peminatan_utama' => $d['peminatan_utama'],
@@ -449,7 +451,7 @@ class KoordinatorController extends Controller
         $request->validate(['berkas' => ['required', 'file', 'mimes:csv,txt', 'max:5120']]);
 
         $baris = array_map('str_getcsv', preg_split('/\r\n|\n|\r/', trim(file_get_contents($request->file('berkas')->getRealPath()))));
-        $header = array_map(fn ($h) => mb_strtolower(trim(preg_replace('/^\xEF\xBB\xBF/', '', $h))), array_shift($baris));
+        $header = array_map(fn($h) => mb_strtolower(trim(preg_replace('/^\xEF\xBB\xBF/', '', $h))), array_shift($baris));
 
         $berhasil = 0;
         $galat = [];
@@ -466,7 +468,7 @@ class KoordinatorController extends Controller
                 'nim'        => ['required_if:peran,mahasiswa', 'nullable', 'unique:mahasiswa,nim'],
                 'angkatan'   => ['required_if:peran,mahasiswa', 'nullable', 'integer'],
                 'nidn'       => ['required_if:peran,dosen', 'nullable', 'unique:dosen,nidn'],
-                'peminatan'  => ['required_if:peran,dosen', 'nullable', Rule::in(PeminatanService::DAFTAR_PEMINATAN)],
+                'peminatan'  => ['required_if:peran,dosen', 'nullable', Rule::exists('peminatan', 'nama')],
             ]);
 
             if ($validator->fails()) {
@@ -476,7 +478,10 @@ class KoordinatorController extends Controller
 
             DB::transaction(function () use ($r) {
                 $user = User::create([
-                    'nama' => $r['nama'], 'email' => $r['email'], 'password' => $r['kata_sandi'], 'role' => $r['peran'],
+                    'nama' => $r['nama'],
+                    'email' => $r['email'],
+                    'password' => $r['kata_sandi'],
+                    'role' => $r['peran'],
                 ]);
                 if ($r['peran'] === 'mahasiswa') {
                     Mahasiswa::create(['user_id' => $user->id, 'nim' => $r['nim'], 'angkatan' => (int) $r['angkatan']]);

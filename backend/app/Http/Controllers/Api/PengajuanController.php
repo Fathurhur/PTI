@@ -23,8 +23,7 @@ class PengajuanController extends Controller
     public function __construct(
         protected PengajuanService $pengajuan,
         protected AutentikasiService $auth,
-    ) {
-    }
+    ) {}
 
     /**
      * Daftar pengajuan sesuai peran: mahasiswa miliknya, dosen yang ditujukan kepadanya, koordinator semua.
@@ -56,7 +55,7 @@ class PengajuanController extends Controller
 
         $daftar = $this->auth->filterPengajuanSesuaiPeran(
             $sesi,
-            $query->get()->map(fn ($p) => $this->format($p))->all()
+            $query->get()->map(fn($p) => $this->format($p))->all()
         );
 
         return response()->json(['pengajuan' => $daftar]);
@@ -78,7 +77,7 @@ class PengajuanController extends Controller
         $data = $request->validate([
             'dosen_id'  => ['required', 'integer'],
             'peran'     => ['required', Rule::in(['1', '2'])],
-            'peminatan' => ['nullable', Rule::in(['IoT', 'AI', 'Cyber'])],
+            'peminatan' => ['nullable', Rule::exists('peminatan', 'nama')],
             'judul'     => ['required_without:saran_judul_id', 'nullable', 'string', 'max:200'],
             'abstrak'   => ['required', 'string'],
             'saran_judul_id' => ['nullable', 'integer'],
@@ -125,17 +124,17 @@ class PengajuanController extends Controller
             ? KuotaDosen::where(['periode_id' => $periode->id, 'peran' => $peran])->get()->keyBy('dosen_id')
             : collect();
 
-        $daftarDosen = Dosen::with(['user:id,nama', 'peminatan', 'saranJudul' => fn ($q) => $q->where('aktif', true)])
+        $daftarDosen = Dosen::with(['user:id,nama', 'peminatan', 'saranJudul' => fn($q) => $q->where('aktif', true)])
             ->where('menerima_bimbingan', true)
             ->get()
-            ->map(fn ($d) => [
+            ->map(fn($d) => [
                 'id'              => $d->id,
                 'nama'            => $d->user->nama,
                 'nidn'            => $d->nidn,
                 'peminatan_utama' => $d->peminatan->nama,
                 'bidang_keahlian' => implode(', ', $d->bidang_keahlian),
                 'kata_kunci'      => $d->kata_kunci,
-                'saran_judul'     => $d->saranJudul->map(fn ($t) => $t->judul . ' ' . $t->deskripsi)->implode(' '),
+                'saran_judul'     => $d->saranJudul->map(fn($t) => $t->judul . ' ' . $t->deskripsi)->implode(' '),
                 'sisa_slot'       => isset($kuota[$d->id]) ? $kuota[$d->id]->sisa() : 0,
             ])->all();
 
@@ -157,7 +156,7 @@ class PengajuanController extends Controller
         $data = $request->validate([
             'dosen_id'  => ['required', 'integer'],
             'peran'     => ['required', Rule::in(['1', '2'])],
-            'peminatan' => ['nullable', Rule::in(['IoT', 'AI', 'Cyber'])],
+            'peminatan' => ['nullable', Rule::exists('peminatan', 'nama')],
             'judul'     => ['required', 'string', 'max:200'],
             'abstrak'   => ['required', 'string'],
         ]);
@@ -172,7 +171,7 @@ class PengajuanController extends Controller
         $daftar = Antrean::with('dosen.user:id,nama')
             ->where('mahasiswa_id', $request->user()->mahasiswa->id)
             ->latest('id')->get()
-            ->map(fn ($a) => [
+            ->map(fn($a) => [
                 'id'      => $a->id,
                 'dosen'   => $a->dosen->user->nama,
                 'peran'   => $a->peran,

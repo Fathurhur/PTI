@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Dosen;
 use App\Models\KuotaDosen;
 use App\Models\Notifikasi;
+use App\Models\Peminatan;
 use App\Models\Periode;
 use App\Services\DashboardService;
 use App\Services\PengajuanService;
@@ -21,8 +22,7 @@ class UmumController extends Controller
     public function __construct(
         protected DashboardService $dashboard,
         protected PengajuanService $pengajuan,
-    ) {
-    }
+    ) {}
 
     /**
      * MR-01: dipolling frontend setiap 5 detik.
@@ -31,7 +31,7 @@ class UmumController extends Controller
     {
         $filter = $request->validate([
             'bidang'    => ['nullable', 'string', 'max:100'],
-            'peminatan' => ['nullable', Rule::in(['IoT', 'AI', 'Cyber'])],
+            'peminatan' => ['nullable', Rule::exists('peminatan', 'nama')],
             'status'    => ['nullable', Rule::in(['tersedia', 'penuh', 'tidak menerima'])],
         ]);
 
@@ -40,7 +40,9 @@ class UmumController extends Controller
             $this->pengajuan->prosesKedaluwarsa();
         }
 
-        return response()->json($this->dashboard->data(Periode::aktif(), $filter));
+        $data = $this->dashboard->data(Periode::aktif(), $filter);
+        $data['daftar_peminatan'] = Peminatan::orderBy('id')->pluck('nama')->all();
+        return response()->json($data);
     }
 
     /**
@@ -60,7 +62,7 @@ class UmumController extends Controller
             'kata_kunci'      => $dosen->kata_kunci,
             'menerima'        => $dosen->menerima_bimbingan,
             'kuota'           => $periode ? KuotaDosen::where(['periode_id' => $periode->id, 'dosen_id' => $dosen->id])->get()
-                ->map(fn ($k) => ['peran' => $k->peran, 'kuota' => $k->kuota, 'tambahan' => $k->kuota_tambahan, 'terisi' => $k->terisi, 'sisa' => $k->sisa()]) : [],
+                ->map(fn($k) => ['peran' => $k->peran, 'kuota' => $k->kuota, 'tambahan' => $k->kuota_tambahan, 'terisi' => $k->terisi, 'sisa' => $k->sisa()]) : [],
         ]);
     }
 

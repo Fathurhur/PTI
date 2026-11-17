@@ -13,8 +13,8 @@ use Throwable;
  * Submodul 10: Peminatan & Kuota Bidang
  *
  * Aturan SRS yang diimplementasikan:
- * - Mahasiswa memilih satu peminatan (IoT, AI, Cyber) saat mengajukan Pembimbing 1,
- *   yang mengikuti peminatan utama dosen tersebut
+ * - Mahasiswa memilih satu peminatan (IoT, AI, Cyber, atau peminatan tambahan dosen)
+ *   saat mengajukan Pembimbing 1, yang mengikuti peminatan utama dosen tersebut
  * - Pengajuan Pembimbing 2 tidak dibatasi peminatan dan dapat dipilih dari dosen mana pun
  * - Kuota setiap peminatan per periode awalnya dibagi rata dari jumlah mahasiswa
  *   Penulisan Proposal dan dapat diubah koordinator (tidak boleh di bawah jumlah terisi)
@@ -29,6 +29,7 @@ class PeminatanService
     public const PEMINATAN_AI    = 'AI';
     public const PEMINATAN_CYBER = 'Cyber';
 
+    /** Peminatan baku bawaan. Dosen bisa menambah peminatan lain, yang disimpan di tabel `peminatan`. */
     public const DAFTAR_PEMINATAN = [
         self::PEMINATAN_IOT,
         self::PEMINATAN_AI,
@@ -81,7 +82,7 @@ class PeminatanService
     /**
      * Validasi perubahan kuota peminatan oleh koordinator.
      *
-     * @throws InvalidArgumentException bila peminatan tidak dikenal, kuota negatif,
+     * @throws InvalidArgumentException bila peminatan kosong, kuota negatif,
      *                                  atau kuota diturunkan di bawah jumlah terisi
      */
     public function validasiUbahKuota(string $peminatan, int $kuotaBaru, int $jumlahTerisi): void
@@ -103,20 +104,23 @@ class PeminatanService
     // 3. VALIDASI PEMINATAN PADA PENGAJUAN
     // =========================================================
 
+    /**
+     * Peminatan baku (IoT, AI, Cyber) maupun peminatan tambahan dosen dianggap valid selama tidak kosong.
+     * Kecocokan dengan peminatan utama dosen tujuan dicek di tentukanPeminatanPengajuan(),
+     * dan keberadaan peminatan di tabel `peminatan` dicek di validasi request (Rule::exists).
+     */
     public function peminatanValid(?string $peminatan): bool
     {
-        return in_array($peminatan, self::DAFTAR_PEMINATAN, true);
+        return $peminatan !== null && trim($peminatan) !== '';
     }
 
     /**
-     * @throws InvalidArgumentException bila peminatan bukan IoT/AI/Cyber
+     * @throws InvalidArgumentException bila peminatan kosong
      */
     public function pastikanPeminatanValid(?string $peminatan): void
     {
         if (!$this->peminatanValid($peminatan)) {
-            throw new InvalidArgumentException(
-                'Peminatan tidak dikenal. Pilih salah satu: ' . implode(', ', self::DAFTAR_PEMINATAN) . '.'
-            );
+            throw new InvalidArgumentException('Peminatan wajib diisi.');
         }
     }
 
@@ -192,12 +196,12 @@ class PeminatanService
     {
         $saran = array_filter(
             $this->ringkasanSlot($kuotaPeminatan),
-            fn ($r) => $r['peminatan'] !== $peminatanPenuh && $r['sisa'] > 0
+            fn($r) => $r['peminatan'] !== $peminatanPenuh && $r['sisa'] > 0
         );
 
-        usort($saran, fn ($a, $b) => $b['sisa'] <=> $a['sisa']);
+        usort($saran, fn($a, $b) => $b['sisa'] <=> $a['sisa']);
 
-        return array_map(fn ($r) => ['peminatan' => $r['peminatan'], 'sisa' => $r['sisa']], $saran);
+        return array_map(fn($r) => ['peminatan' => $r['peminatan'], 'sisa' => $r['sisa']], $saran);
     }
 
     /**
@@ -239,7 +243,7 @@ class PeminatanService
             return "Kuota peminatan {$peminatan} sudah penuh dan tidak ada peminatan lain yang tersedia. Hubungi Koordinator TA.";
         }
 
-        $daftar = implode(', ', array_map(fn ($s) => "{$s['peminatan']} ({$s['sisa']} slot)", $saran));
+        $daftar = implode(', ', array_map(fn($s) => "{$s['peminatan']} ({$s['sisa']} slot)", $saran));
         return "Kuota peminatan {$peminatan} sudah penuh. Peminatan yang masih tersedia: {$daftar}.";
     }
 

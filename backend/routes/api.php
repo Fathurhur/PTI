@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Route;
 */
 
 // Token CSRF untuk frontend: kirim balik di header X-CSRF-TOKEN pada setiap POST/PUT/DELETE
-Route::get('/csrf', fn () => response()->json(['csrf_token' => csrf_token()]));
+Route::get('/csrf', fn() => response()->json(['csrf_token' => csrf_token()]));
 
 // MR-08: autentikasi (dibatasi 5 percobaan per menit)
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
@@ -53,6 +53,7 @@ Route::post('/pengajuan/{pengajuan}/putuskan', [PengajuanController::class, 'put
 Route::prefix('dosen-saya')->group(function () {
     Route::get('/profil', [DosenController::class, 'profil'])->middleware('izin:profil_dosen.kelola');          // MR-02
     Route::put('/profil', [DosenController::class, 'ubahProfil'])->middleware('izin:profil_dosen.kelola');
+    Route::post('/peminatan', [DosenController::class, 'tambahPeminatan'])->middleware('izin:profil_dosen.kelola');
     Route::post('/saran-judul', [DosenController::class, 'simpanSaranJudul'])->middleware('izin:saran_judul.kelola');
     Route::put('/saran-judul/{saran}', [DosenController::class, 'simpanSaranJudul'])->middleware('izin:saran_judul.kelola');
     Route::delete('/saran-judul/{saran}', [DosenController::class, 'nonaktifkanSaranJudul'])->middleware('izin:saran_judul.kelola');
