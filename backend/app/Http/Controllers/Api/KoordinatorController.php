@@ -450,14 +450,31 @@ class KoordinatorController extends Controller
     {
         $request->validate(['berkas' => ['required', 'file', 'mimes:csv,txt', 'max:5120']]);
 
-        $baris = array_map('str_getcsv', preg_split('/\r\n|\n|\r/', trim(file_get_contents($request->file('berkas')->getRealPath()))));
-        $header = array_map(fn($h) => mb_strtolower(trim(preg_replace('/^\xEF\xBB\xBF/', '', $h))), array_shift($baris));
+        $isi = preg_replace('/^\xEF\xBB\xBF/', '', file_get_contents($request->file('berkas')->getRealPath()));
+        $semuaBaris = preg_split('/\r\n|\n|\r/', trim($isi));
+
+        // Excel berbahasa Indonesia menyimpan CSV dengan titik koma, jadi pemisah dikenali dari baris header
+        $pemisah = substr_count($semuaBaris[0], ';') > substr_count($semuaBaris[0], ',') ? ';' : ',';
+        $baris = array_map(fn ($l) => str_getcsv($l, $pemisah, '"', '\\'), $semuaBaris);
+        // Judul kolom dibuat toleran: huruf besar/kecil, spasi, dan sebutan lain (mis. "Nama Lengkap") dikenali
+        $alias = [
+            'nama lengkap' => 'nama', 'nama_lengkap' => 'nama', 'nama mahasiswa' => 'nama', 'name' => 'nama',
+            'kata sandi' => 'kata_sandi', 'password' => 'kata_sandi', 'sandi' => 'kata_sandi',
+            'role' => 'peran',
+        ];
+        $header = array_map(function ($h) use ($alias) {
+            $h = mb_strtolower(trim($h));
+            return $alias[$h] ?? $h;
+        }, array_shift($baris));
 
         $berhasil = 0;
         $galat = [];
 
         foreach ($baris as $i => $kolom) {
-            $r = array_combine($header, array_pad($kolom, count($header), ''));
+            if (trim(implode('', $kolom)) === '') {
+                continue; // baris kosong (sering ditambahkan Excel di akhir berkas)
+            }
+            $r = array_map('trim', array_combine($header, array_pad(array_slice($kolom, 0, count($header)), count($header), '')));
             $nomor = $i + 2;
 
             $validator = validator($r, [
