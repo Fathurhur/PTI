@@ -1,50 +1,168 @@
-# Sistem Informasi Ketersediaan Dosen Pembimbing TA/Skripsi Real-Time
+<div align="center">
 
-Aplikasi web untuk melihat ketersediaan dosen pembimbing secara real-time, mengajukan Pembimbing 1 dan 2 dengan judul dan abstrak, dan mengelola kuota dosen oleh koordinator. Dibuat dengan HTML + Bootstrap 5 + JavaScript yang tersambung ke backend **Laravel 11 + MySQL** di folder [`backend/`](backend/README.md). Semua data (dosen, kuota, pengajuan, antrean, notifikasi, periode) disimpan di database, bukan di localStorage.
+# 🎓 Sistem Informasi Dosen Pembimbing TA & Skripsi
 
-## Menjalankan
+**Lihat slot dosen pembimbing secara real-time, ajukan dengan judul dan abstrak, dan biarkan sistem yang mengatur kuota, antrean, serta kemiripan judul.**
 
-1. Ikuti langkah pemasangan di [`backend/README.md`](backend/README.md), cukup sekali.
-2. Buka **Laragon → Terminal**, lalu jalankan:
-   ```bash
-   cd backend
-   php artisan serve
-   ```
-3. Buka **http://127.0.0.1:8000/login.html**.
+![PHP](https://img.shields.io/badge/PHP-8.2%2B-777BB4?logo=php&logoColor=white)
+![Laravel](https://img.shields.io/badge/Laravel-11-FF2D20?logo=laravel&logoColor=white)
+![MySQL](https://img.shields.io/badge/MySQL-8-4479A1?logo=mysql&logoColor=white)
+![Bootstrap](https://img.shields.io/badge/Bootstrap-5-7952B3?logo=bootstrap&logoColor=white)
+![JavaScript](https://img.shields.io/badge/JavaScript-ES6-F7DF1E?logo=javascript&logoColor=black)
+![Tests](https://img.shields.io/badge/tests-23%20passed-2EA44F)
 
-Halaman frontend disajikan oleh Laravel supaya halaman dan API ada di origin yang sama (cookie sesi + CSRF). Membuka berkas HTML langsung (klik dua kali atau Live Server) **tidak akan bisa login**. Bootstrap dan font dimuat dari CDN, jadi butuh koneksi internet.
+[Fitur](#-fitur-unggulan) · [Alur](#-alur-pengajuan) · [Mulai Cepat](#-mulai-cepat) · [Akun Demo](#-akun-demo) · [Impor Data](#-impor-data-csv) · [Struktur](#-struktur-proyek) · [Dokumentasi API](backend/README.md)
 
-## Akun contoh (kata sandi `rahasia123`)
+</div>
+
+---
+
+## ✨ Fitur Unggulan
+
+| | Fitur | Keterangan |
+|---|---|---|
+| 📡 | **Slot real-time** | Kuota, terisi, dan sisa slot tiap dosen diperbarui otomatis (polling 5 detik). |
+| 🔒 | **Anti rebutan slot** | Slot dikunci dalam satu transaksi database, jadi slot terakhir hanya untuk satu mahasiswa. |
+| 🧠 | **Rekomendasi dosen (TF-IDF)** | Judul dan abstrak dicocokkan dengan keahlian dan saran judul dosen, tampil 5 teratas. |
+| 🛡️ | **Cek kemiripan judul otomatis** | Judul dan abstrak dibandingkan dengan arsip skripsi dan pengajuan aktif; kemiripan ≥ 80% ditolak. |
+| 💡 | **Saran judul dari dosen** | Dosen menyiapkan daftar saran judul. Satu saran hanya bisa dipakai satu mahasiswa. |
+| ⏳ | **Antrean FIFO** | Slot penuh? Mahasiswa masuk antrean dan dipromosikan otomatis saat ada slot kosong. |
+| ⏱️ | **Batas keputusan 7 × 24 jam** | Pengajuan tanpa keputusan menjadi *Kedaluwarsa* dan slotnya dilepas. |
+| 📄 | **Surat penetapan PDF** | Koordinator mengesahkan dan sistem menerbitkan surat bernomor `SP-TA/<periode>/<urut>`. |
+| 📥 | **Impor CSV** | Impor akun mahasiswa/dosen dan arsip judul skripsi (koma atau titik koma, termasuk hasil Excel). |
+| 🔐 | **Akses per peran** | Mahasiswa, dosen, dan koordinator hanya bisa masuk lewat tab perannya masing-masing. |
+
+## 👥 Peran
+
+| Peran | Halaman | Yang bisa dilakukan |
+|---|---|---|
+| 🎒 **Mahasiswa** | `dashboard.html` · `cari.html` · `pengajuan.html` · `riwayat.html` | Melihat slot dosen, mencari dan meminta rekomendasi, memilih saran judul, mengajukan Pembimbing 1 dan 2, masuk antrean, memantau status, mengunduh surat penetapan. |
+| 👨‍🏫 **Dosen** | `dosen.html` | Menerima atau menolak pengajuan (alasan minimal 10 karakter), melihat bimbingan dan sisa kuota, mengelola profil, peminatan, kata kunci, saran judul, dan status menerima. |
+| 🧑‍💼 **Koordinator** | `koordinator.html` | Rekap beban dosen, ekspor CSV, tambah dosen, buka/tutup periode, atur kuota dan slot tambahan, pindahkan pengajuan, sahkan penetapan, impor data. |
+
+## 🔄 Alur Pengajuan
+
+```mermaid
+stateDiagram-v2
+    [*] --> Menunggu: Mahasiswa mengajukan (slot dikunci)
+    [*] --> Antrean: Slot penuh
+    Antrean --> Menunggu: Slot terbuka (FIFO)
+    Menunggu --> Diterima: Dosen menerima
+    Menunggu --> Ditolak: Dosen menolak + alasan
+    Menunggu --> Kedaluwarsa: Lewat 7 x 24 jam
+    Diterima --> Ditetapkan: Koordinator mengesahkan + surat PDF
+    Ditolak --> [*]: Slot dilepas
+    Kedaluwarsa --> [*]: Slot dilepas
+    Ditetapkan --> [*]
+```
+
+1. **Mahasiswa** memilih dosen untuk Pembimbing 1, lalu mengisi **judul dan abstrak**, atau memakai **saran judul** milik dosen itu (abstrak tetap ditulis sendiri).
+2. Judul tulisan sendiri dicocokkan otomatis dengan **arsip judul** dan pengajuan aktif. Terlalu mirip berarti ditolak sebelum slot dikunci.
+3. Slot dikunci dalam satu transaksi dan status menjadi **Menunggu**. Bila penuh, mahasiswa bisa **masuk antrean**.
+4. **Dosen** menerima atau menolak dalam 7 × 24 jam. Slot dilepas bila ditolak atau kedaluwarsa, lalu antrean dipromosikan.
+5. **Koordinator** mengesahkan pengajuan yang diterima dan sistem menerbitkan **surat penetapan PDF**.
+6. **Pembimbing 2** dipilih setelah Pembimbing 1 aktif, harus dosen yang berbeda, dan judul serta abstraknya mengikuti Pembimbing 1.
+
+## 🚀 Mulai Cepat
+
+**Prasyarat:** PHP 8.2+ (ekstensi `pdo_mysql`, `mbstring`, `openssl`, `fileinfo`, `gd`), Composer 2, MySQL 8. Paling mudah lewat **Laragon** atau **XAMPP**.
+
+```bash
+git clone https://github.com/Fathurhur/PTI.git
+cd PTI/backend
+
+composer install
+copy .env.example .env          # Linux/macOS: cp .env.example .env
+php artisan key:generate
+```
+
+Buat database, lalu isi tabel dan data contoh:
+
+```bash
+mysql -uroot -e "CREATE DATABASE IF NOT EXISTS sistem_dosen_ta CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+php artisan migrate:fresh --seed
+```
+
+Jalankan aplikasi dan buka **http://127.0.0.1:8000/login.html**:
+
+```bash
+php artisan serve
+```
+
+> **Penting:** halaman dilayani oleh Laravel supaya halaman dan API satu origin (cookie sesi + CSRF). Membuka file HTML langsung atau lewat Live Server **tidak bisa login**. Bootstrap dan font dimuat dari CDN, jadi butuh internet. Detail pemasangan ada di [`backend/README.md`](backend/README.md).
+
+## 🔑 Akun Demo
+
+Kata sandi semua akun contoh: `rahasia123`. Pilih **tab sesuai peran** di halaman login.
 
 | Peran | Login dengan |
 |---|---|
-| Mahasiswa | NIM `1202230013` (belum punya pembimbing), atau `1202230201` sampai `1202230204` |
-| Dosen | NIDN `0412038801` (Dr. Khodijah, IoT), `0410118804` (Yohanes, AI), `0420068503` (Philip, Cyber) |
-| Koordinator | `koordinator@prodi.test` |
+| 🎒 Mahasiswa | NIM `1202230013` (belum punya pembimbing), atau `1202230201` sampai `1202230204` |
+| 👨‍🏫 Dosen | NIDN `0412038801` (Dr. Khodijah, IoT), `0410118804` (Yohanes, AI), `0420068503` (Philip, Cyber) |
+| 🧑‍💼 Koordinator | `koordinator@prodi.test` |
 
-Untuk mengembalikan data ke kondisi awal, jalankan `php artisan migrate:fresh --seed` di folder `backend`. Data contoh sudah berisi beberapa pengajuan. Untuk tampilan bersih (tanpa pengajuan dan antrean, semua kuota dosen terisi 0), kosongkan tabel `pengajuan`, `antrean`, `notifikasi`, dan `log_aktivitas`, lalu set `kuota_dosen.terisi = 0`. Akun, saran judul, dan arsip judul tidak perlu diubah.
+Mengembalikan data ke kondisi awal: `php artisan migrate:fresh --seed` di folder `backend`. Untuk tampilan **bersih** tanpa pengajuan dan antrean, kosongkan tabel `pengajuan`, `antrean`, `notifikasi`, `log_aktivitas`, lalu set `kuota_dosen.terisi = 0`. Akun, saran judul, dan arsip judul tidak perlu diubah.
 
-## Peran dan fitur
+## 📥 Impor Data (CSV)
 
-| Peran | Halaman | Fitur |
-|---|---|---|
-| Mahasiswa | `dashboard.html`, `cari.html`, `pengajuan.html`, `riwayat.html` | Slot dosen real-time (polling 5 detik), rekomendasi dosen TF-IDF dari judul dan abstrak, melihat dan memakai saran judul dosen, cek kemiripan judul langsung saat mengetik, ajukan Pembimbing 1 dan 2, masuk antrean bila slot penuh, pantau status, unduh surat penetapan |
-| Dosen | `dosen.html` | Terima atau tolak pengajuan (alasan minimal 10 karakter), lihat bimbingan dan sisa kuota, kelola profil, peminatan, kata kunci, saran judul, dan status menerima |
-| Koordinator | `koordinator.html` | Rekap beban dosen, ekspor CSV, tambah dosen, buka/tutup/ubah periode, kuota dosen per peran, slot tambahan, sahkan penetapan dan terbitkan surat PDF, pindahkan pengajuan, impor CSV pengguna dan arsip judul |
+Di halaman koordinator, tab **Impor Data**. Pemisah koma atau titik koma dikenali otomatis, jadi hasil *Save As CSV* dari Excel Indonesia tetap terbaca.
 
-## Alur utama (sesuai SRS)
+**Akun pengguna**, kolom: `peran, nama, email, kata_sandi, nim, angkatan, nidn, peminatan`
 
-1. **Mahasiswa** mengajukan Pembimbing 1 dengan mengisi **judul dan abstrak**. Peminatan mengikuti peminatan utama dosen. Setelah memilih dosen, mahasiswa bisa memakai salah satu **saran judul** milik dosen itu (judul terisi otomatis, abstrak tetap ditulis sendiri) atau menulis judul sendiri. Judul sendiri dicocokkan otomatis (TF-IDF) dengan arsip judul dan pengajuan aktif; kemiripan 80% atau lebih ditolak. Lalu slot dosen dikunci dalam satu transaksi dan status menjadi **Menunggu**.
-   - Satu saran judul hanya bisa dipakai **satu mahasiswa** (yang pertama mengajukan). Saran dilepas lagi bila pengajuannya ditolak atau kedaluwarsa. Saran judul tidak diperiksa kemiripannya.
-2. Bila slot dosen penuh, mahasiswa bisa **masuk antrean**. Saat slot terbuka (pengajuan ditolak, kedaluwarsa, kuota dinaikkan, atau ada slot tambahan), mahasiswa pertama di antrean dipromosikan otomatis.
-3. **Dosen** menerima (status **Diterima**) atau menolak dengan alasan. Pengajuan tanpa keputusan selama 7 × 24 jam menjadi **Kedaluwarsa** dan slotnya dilepas.
-4. **Koordinator** mengesahkan pengajuan yang sudah Diterima. Statusnya menjadi **Ditetapkan** dan sistem menerbitkan surat `SP-TA/<periode>/<urut>` dalam format PDF.
-5. Pembimbing 2 dipilih setelah Pembimbing 1 aktif, harus dosen yang berbeda, dan judul/abstraknya mengikuti Pembimbing 1.
+```csv
+peran,nama,email,kata_sandi,nim,angkatan,nidn,peminatan
+mahasiswa,Budi Santoso,1202230301@mahasiswa.test,rahasia123,1202230301,2023,,
+```
 
-## Struktur
+**Arsip judul skripsi**, kolom: `judul, tahun, abstrak (opsional), sumber (opsional)`
 
-- `js/app.js`: inti aplikasi (pemanggil API + CSRF, data bersama, polling, navbar, modal ajukan, sesi)
-- `js/mahasiswa.js`, `js/dosen.js`, `js/koordinator.js`: logika per peran
-- `js/data.js`: daftar bidang keahlian, peminatan, dan teks contoh
-- `css/style.css`: semua gaya
-- `backend/`: API Laravel, database, aturan bisnis MR-01 sampai MR-10, dan pengujian
+```csv
+judul,tahun,abstrak,sumber
+Klasifikasi Penyakit Daun Padi Menggunakan CNN,2025,Penelitian ini membangun model ...,Perpustakaan
+```
+
+## 🧪 Pengujian
+
+```bash
+cd backend
+php artisan config:clear
+DB_CONNECTION=sqlite DB_DATABASE=:memory: php artisan test
+```
+
+> ⚠️ Selalu pakai SQLite in-memory seperti di atas. Bila ada cache konfigurasi (`bootstrap/cache/config.php`), pengaturan pengujian bisa diabaikan dan tes menjalankan `migrate:fresh` ke MySQL asli, sehingga **data terhapus**.
+
+## 🗂️ Struktur Proyek
+
+```text
+PTI/
+├── index.html · login.html · 403.html
+├── dashboard.html · cari.html · pengajuan.html · riwayat.html   # mahasiswa
+├── dosen.html                                                   # dosen
+├── koordinator.html                                             # koordinator
+├── css/style.css                                                # seluruh gaya
+├── js/
+│   ├── app.js            # inti: API + CSRF, polling, navbar, modal ajukan, sesi
+│   ├── mahasiswa.js · dosen.js · koordinator.js
+│   └── data.js           # bidang keahlian, peminatan, teks contoh
+└── backend/              # Laravel 11
+    ├── app/Http/Controllers/Api/    # endpoint REST
+    ├── app/Services/                # aturan bisnis (pengajuan, antrean, TF-IDF, kemiripan, surat)
+    ├── database/migrations · seeders
+    └── tests/Feature/               # pengujian
+```
+
+## 🛠️ Teknologi
+
+- **Frontend:** HTML, Bootstrap 5, Bootstrap Icons, JavaScript (tanpa framework)
+- **Backend:** Laravel 11, PHP 8.2+, sesi cookie + CSRF, antrean dan scheduler Laravel
+- **Database:** MySQL 8 (pengujian memakai SQLite in-memory)
+- **Algoritma:** TF-IDF + cosine similarity untuk rekomendasi dosen dan kemiripan judul
+- **Dokumen:** surat penetapan PDF (DomPDF)
+
+---
+
+<div align="center">
+
+Dibuat untuk Program Studi S1 Teknologi Informasi · Kampus Surabaya
+
+</div>
