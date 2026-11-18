@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Services\AutentikasiService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 
 /**
  * MR-08: login dengan Email/NIM/NIDN + kata sandi (bcrypt), sesi 120 menit, logout.
@@ -22,6 +23,8 @@ class AuthController extends Controller
         $data = $request->validate([
             'identitas'  => ['required', 'string', 'max:150'],
             'kata_sandi' => ['required', 'string', 'max:72'],
+            // tab login yang dipilih; akun hanya boleh masuk lewat tab sesuai perannya
+            'peran'      => ['required', Rule::in(AutentikasiService::DAFTAR_PERAN)],
         ]);
 
         $identitas = trim($data['identitas']);
@@ -50,6 +53,15 @@ class AuthController extends Controller
 
         if (!$hasil['berhasil']) {
             return response()->json(['pesan' => $hasil['pesan']], $hasil['status_http']);
+        }
+
+        // Kata sandi sudah benar, tetapi tab yang dipilih tidak sesuai peran akun: tolak tanpa membuat sesi
+        if ($hasil['user']['role'] !== $data['peran']) {
+            $nama = ['mahasiswa' => 'Mahasiswa', 'dosen' => 'Dosen', 'koordinator' => 'Koordinator'];
+            return response()->json([
+                'pesan' => "Akun ini terdaftar sebagai {$nama[$hasil['user']['role']]}, bukan {$nama[$data['peran']]}. "
+                         . "Pilih tab {$nama[$hasil['user']['role']]} untuk masuk.",
+            ], 403);
         }
 
         Auth::login($user);

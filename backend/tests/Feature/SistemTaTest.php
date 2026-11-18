@@ -56,17 +56,43 @@ class SistemTaTest extends TestCase
 
     public function test_mr08_login_nim_dan_pesan_gagal_seragam(): void
     {
-        $this->postJson('/api/login', ['identitas' => '1202230013', 'kata_sandi' => 'rahasia123'])
+        $this->postJson('/api/login', ['identitas' => '1202230013', 'kata_sandi' => 'rahasia123', 'peran' => 'mahasiswa'])
             ->assertOk()->assertJsonPath('user.peran', 'mahasiswa');
 
         $this->postJson('/api/logout')->assertOk();
 
-        $salahSandi = $this->postJson('/api/login', ['identitas' => '1202230013', 'kata_sandi' => 'salah12345'])->assertStatus(401);
-        $tidakAda = $this->postJson('/api/login', ['identitas' => '9999999999', 'kata_sandi' => 'salah12345'])->assertStatus(401);
+        $salahSandi = $this->postJson('/api/login', ['identitas' => '1202230013', 'kata_sandi' => 'salah12345', 'peran' => 'mahasiswa'])->assertStatus(401);
+        $tidakAda = $this->postJson('/api/login', ['identitas' => '9999999999', 'kata_sandi' => 'salah12345', 'peran' => 'mahasiswa'])->assertStatus(401);
         $this->assertSame($salahSandi->json('pesan'), $tidakAda->json('pesan'));
 
-        $this->postJson('/api/login', ['identitas' => '0412038801', 'kata_sandi' => 'rahasia123'])
+        $this->postJson('/api/login', ['identitas' => '0412038801', 'kata_sandi' => 'rahasia123', 'peran' => 'dosen'])
             ->assertOk()->assertJsonPath('user.peran', 'dosen');
+    }
+
+    public function test_mr08_login_hanya_lewat_tab_sesuai_peran(): void
+    {
+        $this->withoutMiddleware(\Illuminate\Routing\Middleware\ThrottleRequests::class); // banyak percobaan sengaja
+        $akun = [
+            ['1202230013', 'mahasiswa'],
+            ['0412038801', 'dosen'],
+            ['koordinator@prodi.test', 'koordinator'],
+        ];
+
+        foreach ($akun as [$identitas, $peranAsli]) {
+            foreach (['mahasiswa', 'dosen', 'koordinator'] as $tab) {
+                $res = $this->postJson('/api/login', ['identitas' => $identitas, 'kata_sandi' => 'rahasia123', 'peran' => $tab]);
+                if ($tab === $peranAsli) {
+                    $res->assertOk()->assertJsonPath('user.peran', $peranAsli);
+                    $this->postJson('/api/logout')->assertOk();
+                } else {
+                    $res->assertStatus(403);
+                    $this->getJson('/api/saya')->assertStatus(401); // tidak ada sesi yang terbentuk
+                }
+            }
+        }
+
+        // tanpa memilih tab peran, login ditolak
+        $this->postJson('/api/login', ['identitas' => '1202230013', 'kata_sandi' => 'rahasia123'])->assertStatus(422);
     }
 
     public function test_mr08_kata_sandi_tersimpan_bcrypt(): void

@@ -78,7 +78,9 @@
 
     var tombol = document.querySelector('#f button.btn-red');
     tombolSibuk(tombol, true, 'Memeriksa...');
-    var r = await Api.post('/login', { identitas: user, kata_sandi: pass }, { bolehTanpaLogin: true });
+    // peran sesuai tab yang dipilih; server menolak bila akun bukan milik tab itu
+    var peranTab = { mhs: 'mahasiswa', dosen: 'dosen', koor: 'koordinator' }[document.querySelector('#tabs button.on').dataset.role];
+    var r = await Api.post('/login', { identitas: user, kata_sandi: pass, peran: peranTab }, { bolehTanpaLogin: true });
     tombolSibuk(tombol, false);
 
     if (!r.ok) {
