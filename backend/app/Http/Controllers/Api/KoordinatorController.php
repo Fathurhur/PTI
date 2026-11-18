@@ -441,41 +441,85 @@ class KoordinatorController extends Controller
         ]);
     }
 
+    /** Pesan galat impor pengguna dalam bahasa Indonesia (locale aplikasi masih 'en'). */
+    protected const PESAN_IMPOR_PENGGUNA = [
+        'peran.required'      => 'Kolom peran wajib diisi.',
+        'peran.in'            => 'Kolom peran harus berisi "mahasiswa" atau "dosen".',
+        'nama.required'       => 'Kolom nama wajib diisi.',
+        'nama.max'            => 'Kolom nama maksimal 100 karakter.',
+        'email.required'      => 'Kolom email wajib diisi.',
+        'email.email'         => 'Format email tidak valid.',
+        'email.unique'        => 'Email sudah terdaftar.',
+        'kata_sandi.required' => 'Kolom kata_sandi wajib diisi.',
+        'kata_sandi.min'      => 'Kata sandi minimal 8 karakter.',
+        'kata_sandi.max'      => 'Kata sandi maksimal 72 karakter.',
+        'nim.required_if'     => 'Kolom nim wajib diisi untuk peran mahasiswa.',
+        'nim.unique'          => 'NIM sudah terdaftar.',
+        'angkatan.required_if' => 'Kolom angkatan wajib diisi untuk peran mahasiswa.',
+        'angkatan.integer'    => 'Kolom angkatan harus berupa angka tahun, misalnya 2021.',
+        'nidn.required_if'    => 'Kolom nidn wajib diisi untuk peran dosen.',
+        'nidn.unique'         => 'NIDN sudah terdaftar.',
+        'peminatan.required_if' => 'Kolom peminatan wajib diisi untuk peran dosen.',
+        'peminatan.exists'    => 'Peminatan tidak dikenali, sesuaikan dengan daftar peminatan yang ada.',
+    ];
+
     /**
      * Impor akun mahasiswa/dosen.
      * Kolom: peran,nama,email,kata_sandi,nim,angkatan,nidn,peminatan
      * (mahasiswa: nim + angkatan; dosen: nidn + peminatan)
+     *
+     * Pemisah kolom dideteksi otomatis (koma, titik koma, tab, atau pipa) supaya
+     * berkas hasil "Save As CSV" dari Excel locale Indonesia (titik koma + BOM)
+     * tetap terbaca.
      */
     public function imporPengguna(Request $request)
     {
         $request->validate(['berkas' => ['required', 'file', 'mimes:csv,txt', 'max:5120']]);
 
         $isi = preg_replace('/^\xEF\xBB\xBF/', '', file_get_contents($request->file('berkas')->getRealPath()));
-        $semuaBaris = preg_split('/\r\n|\n|\r/', trim($isi));
+        $baris = array_values(array_filter(
+            preg_split('/\r\n|\n|\r/', trim($isi)),
+            fn ($b) => trim($b) !== '' && trim($b, " \t;,|") !== ''
+        ));
 
-        // Excel berbahasa Indonesia menyimpan CSV dengan titik koma, jadi pemisah dikenali dari baris header
-        $pemisah = substr_count($semuaBaris[0], ';') > substr_count($semuaBaris[0], ',') ? ';' : ',';
-        $baris = array_map(fn ($l) => str_getcsv($l, $pemisah, '"', '\\'), $semuaBaris);
-        // Judul kolom dibuat toleran: huruf besar/kecil, spasi, dan sebutan lain (mis. "Nama Lengkap") dikenali
-        $alias = [
-            'nama lengkap' => 'nama', 'nama_lengkap' => 'nama', 'nama mahasiswa' => 'nama', 'name' => 'nama',
-            'kata sandi' => 'kata_sandi', 'password' => 'kata_sandi', 'sandi' => 'kata_sandi',
-            'role' => 'peran',
-        ];
-        $header = array_map(function ($h) use ($alias) {
-            $h = mb_strtolower(trim($h));
-            return $alias[$h] ?? $h;
-        }, array_shift($baris));
+        if (empty($baris)) {
+            return response()->json([
+                'pesan' => 'Berkas CSV kosong.',
+                'galat' => [['baris' => 1, 'pesan' => 'Berkas CSV kosong.']],
+            ], 422);
+        }
+
+        $pemisah = $this->deteksiPemisahCsv($baris[0]);
+        $header = array_map(
+            fn ($h) => $this->normalkanNamaKolom($h),
+            str_getcsv(array_shift($baris), $pemisah, '"', '\\')
+        );
+
+        $wajib = array_diff(['peran', 'nama', 'email', 'kata_sandi'], $header);
+        if ($wajib) {
+            $pesan = 'Header CSV tidak lengkap, kolom wajib yang tidak ditemukan: ' . implode(', ', $wajib)
+                . '. Kolom yang terbaca: ' . implode(', ', $header)
+                . '. Pastikan baris pertama berisi nama kolom dan setiap kolom dipisah koma atau titik koma.';
+
+            return response()->json([
+                'pesan' => $pesan,
+                'galat' => [['baris' => 1, 'pesan' => $pesan]],
+            ], 422);
+        }
 
         $berhasil = 0;
         $galat = [];
 
-        foreach ($baris as $i => $kolom) {
-            if (trim(implode('', $kolom)) === '') {
-                continue; // baris kosong (sering ditambahkan Excel di akhir berkas)
-            }
-            $r = array_map('trim', array_combine($header, array_pad(array_slice($kolom, 0, count($header)), count($header), '')));
+        foreach ($baris as $i => $isiBaris) {
             $nomor = $i + 2;
+            $kolom = str_getcsv($isiBaris, $pemisah, '"', '\\');
+            $kolom = array_slice(array_pad($kolom, count($header), ''), 0, count($header));
+            $r = array_map(function ($v) {
+                $v = is_string($v) ? trim($v) : $v;
+
+                return $v === '' ? null : $v; // sel kosong -> null supaya aturan "nullable" bekerja
+            }, array_combine($header, $kolom));
+            $r['peran'] = mb_strtolower((string) ($r['peran'] ?? ''));
 
             $validator = validator($r, [
                 'peran'      => ['required', Rule::in(['mahasiswa', 'dosen'])],
@@ -486,7 +530,7 @@ class KoordinatorController extends Controller
                 'angkatan'   => ['required_if:peran,mahasiswa', 'nullable', 'integer'],
                 'nidn'       => ['required_if:peran,dosen', 'nullable', 'unique:dosen,nidn'],
                 'peminatan'  => ['required_if:peran,dosen', 'nullable', Rule::exists('peminatan', 'nama')],
-            ]);
+            ], self::PESAN_IMPOR_PENGGUNA);
 
             if ($validator->fails()) {
                 $galat[] = ['baris' => $nomor, 'pesan' => implode(' ', $validator->errors()->all())];
@@ -518,6 +562,38 @@ class KoordinatorController extends Controller
         LogAktivitas::catat('impor_pengguna', ['berhasil' => $berhasil, 'galat' => count($galat)]);
 
         return response()->json(['pesan' => "{$berhasil} akun diimpor.", 'galat' => $galat]);
+    }
+
+    /** Tebak pemisah kolom CSV dari baris header (Excel ID memakai titik koma). */
+    protected function deteksiPemisahCsv(string $barisHeader): string
+    {
+        $kandidat = [',' => 0, ';' => 0, "\t" => 0, '|' => 0];
+        foreach (array_keys($kandidat) as $p) {
+            $kandidat[$p] = substr_count($barisHeader, $p);
+        }
+        arsort($kandidat);
+        $terbanyak = array_key_first($kandidat);
+
+        return $kandidat[$terbanyak] > 0 ? $terbanyak : ',';
+    }
+
+    /** Samakan penulisan nama kolom: huruf kecil, spasi/strip jadi underscore, plus alias umum. */
+    protected function normalkanNamaKolom(string $nama): string
+    {
+        $nama = mb_strtolower(trim(preg_replace('/^\xEF\xBB\xBF/', '', $nama), " \t\n\r\0\x0B\"'"));
+        $nama = preg_replace('/[\s\-]+/', '_', $nama);
+
+        return [
+            'role'          => 'peran',
+            'peran_pengguna' => 'peran',
+            'nama_lengkap'  => 'nama',
+            'alamat_email'  => 'email',
+            'password'      => 'kata_sandi',
+            'katasandi'     => 'kata_sandi',
+            'sandi'         => 'kata_sandi',
+            'tahun_angkatan' => 'angkatan',
+            'bidang_peminatan' => 'peminatan',
+        ][$nama] ?? $nama;
     }
 
     protected function periodeAktif(): Periode

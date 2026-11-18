@@ -792,9 +792,9 @@ async function kirimPindah(btn) {
 // ===== IMPOR CSV =====
 var KOLOM_IMPOR = {
   pengguna:
-    "Kolom: peran, nama, email, kata_sandi, nim, angkatan, nidn, peminatan (mahasiswa isi nim + angkatan, dosen isi nidn + peminatan)",
+    "Kolom: peran, nama, email, kata_sandi, nim, angkatan, nidn, peminatan (mahasiswa isi nim + angkatan, dosen isi nidn + peminatan). Pemisah koma atau titik koma sama-sama didukung.",
   arsip:
-    "Kolom: judul, tahun, abstrak (opsional), sumber (opsional). Dipakai untuk pemeriksaan kemiripan judul.",
+    "Kolom: judul, tahun, abstrak (opsional), sumber (opsional). Dipakai untuk pemeriksaan kemiripan judul. Pemisah koma atau titik koma sama-sama didukung.",
 };
 
 function jenisImpor() {
